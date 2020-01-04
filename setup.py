@@ -9,12 +9,11 @@ with open(os.path.join(os.path.dirname(__file__), "README.md"), "r") as fh:
 
 NUMPY_MIN_VERSION = '1.8.2'
 SCIPY_MIN_VERSION = '1.3.1'
-MATPLOTLIB_MIN_VERSION = '3.1.1'
 PYTABLES_MIN_VERSION = '3.5.1'
 
 setuptools.setup(
     name="nist-calculators",
-    version="0.0.2",
+    version="0.0.3",
     author="Mikhail Zelenyi",
     author_email="mihail.zelenyy@phystech.edu",
     url='http://npm.mipt.ru/',
@@ -37,7 +36,6 @@ setuptools.setup(
     install_requires=[
         'numpy>={0}'.format(NUMPY_MIN_VERSION),
         'scipy>={0}'.format(SCIPY_MIN_VERSION),
-        'matplotlib>={0}'.format(MATPLOTLIB_MIN_VERSION),
         'tables>={0}'.format(PYTABLES_MIN_VERSION),
 
     ],
