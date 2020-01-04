@@ -14,12 +14,12 @@ MATPLOTLIB_MIN_VERSION = '3.1.1'
 PYTABLES_MIN_VERSION = '3.5.1'
 
 setuptools.setup(
-    name="nist-calculator",
+    name="nist-calculators",
     version="0.0.2",
     author="Mikhail Zelenyi",
     author_email="mihail.zelenyy@phystech.edu",
     url='http://npm.mipt.ru/',
-    description="Python implementaion of NIST XCOM",
+    description="Python implementaion of several NIST calculator",
     license="MIT License",
     long_description=long_description,
     long_description_content_type="text/markdown",

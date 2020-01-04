@@ -1,8 +1,18 @@
+import logging
 import os
 import sys
-
 import numpy as np
 import tables
+
+ROOT_PATH = os.path.dirname(__file__)
+
+class NameProcess:
+    ENERGY = "energy"
+    COHERENT = "coherent"
+    INCOHERENT = "incoherent"
+    PHOTOELECTRIC = "photoelectric"
+    PAIR_ATOM = "pair_atom"
+    PAIR_ELECTRON = "pair_electron"
 
 # Atomic weight
 ATWTS = [
@@ -72,17 +82,17 @@ def read_data_for_element(path_to_xcom_data, Z) -> XCOMData:
             map(float, file[4 + result.MAXEDG + result.MAXEDG: 4 + result.MAXEDG + result.MAXEDG + result.MAXEDG]),
             dtype='d')[::-1]
         file_start = 4 + result.MAXEDG + result.MAXEDG + result.MAXEDG
-    result.E = np.fromiter(map(float, file[file_start:file_start + result.MAXE]), dtype=[("energy", 'd')])
+    result.E = np.fromiter(map(float, file[file_start:file_start + result.MAXE]), dtype=[(NameProcess.ENERGY, 'd')])
     file_start += result.MAXE
-    result.SCATCO = np.fromiter(map(float, file[file_start:file_start + result.MAXE]), dtype=[("coherent", 'd')])
+    result.SCATCO = np.fromiter(map(float, file[file_start:file_start + result.MAXE]), dtype=[(NameProcess.COHERENT, 'd')])
     file_start += result.MAXE
-    result.SCATIN = np.fromiter(map(float, file[file_start:file_start + result.MAXE]), dtype=[("incoherent", 'd')])
+    result.SCATIN = np.fromiter(map(float, file[file_start:file_start + result.MAXE]), dtype=[(NameProcess.INCOHERENT, 'd')])
     file_start += result.MAXE
-    result.PHOT = np.fromiter(map(float, file[file_start:file_start + result.MAXE]), dtype=[("photoelectric", 'd')])
+    result.PHOT = np.fromiter(map(float, file[file_start:file_start + result.MAXE]), dtype=[(NameProcess.PHOTOELECTRIC, 'd')])
     file_start += result.MAXE
-    result.PAIRAT = np.fromiter(map(float, file[file_start:file_start + result.MAXE]), dtype=[("pair_atom", 'd')])
+    result.PAIRAT = np.fromiter(map(float, file[file_start:file_start + result.MAXE]), dtype=[(NameProcess.PAIR_ATOM, 'd')])
     file_start += result.MAXE
-    result.PAIREL = np.fromiter(map(float, file[file_start:file_start + result.MAXE]), dtype=[("pair_electron", 'd')])
+    result.PAIREL = np.fromiter(map(float, file[file_start:file_start + result.MAXE]), dtype=[(NameProcess.PAIR_ELECTRON, 'd')])
     file_start += result.MAXE
     result.MAXK = 0
 
@@ -104,10 +114,15 @@ def read_data_for_element(path_to_xcom_data, Z) -> XCOMData:
         result.PHC = np.array(result.PHC)
     return result
 
+def drop_doubling(data):
+    _, indx = np.unique(data[NameProcess.ENERGY], return_index=True)
+    return data[indx]
 
 def convertMDATX3toHDF5(path_to_xcom_data):
-    filename = os.path.join('data', 'NIST_XCOM.hdf5')
+    filename = os.path.join(ROOT_PATH, 'data', 'NIST_XCOM.hdf5')
     with tables.open_file(filename, "w") as h5file:
+
+        filters = tables.Filters(complevel=3, fletcher32=True)
 
         for Z in range(1, 101):
             data = read_data_for_element(path_to_xcom_data, Z)
@@ -120,7 +135,13 @@ def convertMDATX3toHDF5(path_to_xcom_data):
             temp_data = [it[name] for name, it in zip(temp_names, temp_tuple)]
             data_to_file = np.core.records.fromarrays(temp_data,names=",".join(temp_names))
 
-            table = h5file.create_table(group, "data", obj=data_to_file)
+            delta = np.diff(data_to_file[NameProcess.ENERGY])
+            if np.any(delta <= 0):
+                print("Drop doubling for {}".format(data.IZ))
+                data_to_file = drop_doubling(data_to_file)
+
+
+            table = h5file.create_table(group, "data", obj=data_to_file, filters=filters)
             table.attrs['energy_unit'] = 'eV'
             table.attrs["cross_section_unit"] = 'barn/atom'
             table.attrs['Z'] = data.IZ
@@ -136,12 +157,12 @@ def convertMDATX3toHDF5(path_to_xcom_data):
                 edge_group = h5file.create_group(group, 'AbsorptionEdge')
                 name = ['index', 'name', 'EDGEN']
                 data_to_file = np.core.records.fromarrays([data.IDG, np.array(data.ADG, dtype='S'), data.EDGEN], names=",".join(name))
-                table = h5file.create_table(edge_group, "info", obj=data_to_file)
+                table = h5file.create_table(edge_group, "info", obj=data_to_file, filters=filters)
                 table.attrs["energy_unit"] = 'eV'
                 table.flush()
                 for e, p, name in zip(data.ENG, data.PHC, data.ADG):
                     data_to_file = np.core.records.fromarrays([e,p], names="energy,photoelectric")
-                    table = h5file.create_table(edge_group, name, obj=data_to_file)
+                    table = h5file.create_table(edge_group, name, obj=data_to_file, filters=filters)
                     table.attrs["energy_unit"] = 'MeV'
                     table.attrs["cross_section_unit"] = 'barn/atom'
                     table.flush()
