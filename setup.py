@@ -9,7 +9,6 @@ with open(os.path.join(os.path.dirname(__file__), "README.md"), "r") as fh:
 
 NUMPY_MIN_VERSION = '1.8.2'
 SCIPY_MIN_VERSION = '1.3.1'
-# PANDAS_MIN_VERSION = ''
 MATPLOTLIB_MIN_VERSION = '3.1.1'
 PYTABLES_MIN_VERSION = '3.5.1'
 
@@ -23,18 +22,18 @@ setuptools.setup(
     license="MIT License",
     long_description=long_description,
     long_description_content_type="text/markdown",
-    keywords="phd",
+    keywords="gamma-ray, cross-section, xcom",
     packages=["xcom"],
     classifiers=(
         "Programming Language :: Python :: 3",
         "License :: OSI Approved :: MIT License",
         "Operating System :: OS Independent",
     ),
-    # project_urls={
-    #     "Bug Tracker": "",
-    #     "Documentation": "",
-    #     "Source Code": "",
-    # },
+    project_urls={
+        "Bug Tracker": "https://github.com/Zelenyy/nist-calculators/issues",
+        "Documentation": "https://github.com/Zelenyy/nist-calculators",
+        "Source Code": "https://github.com/Zelenyy/nist-calculators",
+    },
     install_requires=[
         'numpy>={0}'.format(NUMPY_MIN_VERSION),
         'scipy>={0}'.format(SCIPY_MIN_VERSION),

@@ -1,6 +1,6 @@
 import csv
 import os
-from typing import Callable, List, Union
+from typing import Callable, List, Union, Optional
 import numpy as np
 import tables
 from scipy.interpolate import CubicSpline, interp1d
@@ -15,59 +15,43 @@ PERIODIC_TABLE_PATH = os.path.join(DATA_PATH, "PeriodicTableofElements.csv")
 _TRESHOLD_PAIR_ELECTRON = 2.044014E+06  # eV
 _TRESHOLD_PAIR_ATOM = 1.022007E+06 # eV
 
-
-# class XCOM1:
-#
-
-#
-#     def addElement(self, Z: Union[int, str], weight: float = None):
-#         """
-#         Добавляет новый элемент к сущетсвующим
-#
-#         Parameters
-#         ----------
-#         Z : порядковый номер элемента или символ элемента
-#         weight : указывает массовую долю элемента, по умолчанию использует массу элемента
-#
-#         Returns
-#         -------
-#         self
-#         """
-#         if type(Z) == str:
-#             Z = self._findNumberOfElement(Z)
-#         if (type(Z) == int) and (0 < Z < 101):
-#             # TODO raise
-#             if weight is None:
-#                 weight = self.data[str(Z).rjust(3, '0')].attrs['AtomicWeight']
-#             self._addSubstance([Z], [weight])
-#         else:
-#             pass  # TODO raise
-#
-#         return self
-#
-#     def addMaterial(self, formula: str, weight: float = None):
-
-
-
-
 class MaterialFactory:
+    """
+    Class for creation compound by mass fraction
+    """
     element_symbols = None
 
     def __init__(self):
         self.elements = []
         self.weights = []
 
-    def add_element(self, element, weight) -> 'MaterialFactory':
+    def add_element(self, element : Union[str, int], weight: float) -> 'MaterialFactory':
+        """
+        Add element and its mass fraction
+
+        Parameters
+        ----------
+        element :  Union[str, int]
+                atomic number or symbol of element
+        weight : float
+                 mass fraction, unnormed
+        """
         self.elements.append(element)
         self.weights.append(weight)
         return self
 
     def add_material(self, material) -> 'MaterialFactory':
+        """
+        Add another material
+        """
         self.elements += material.elements_by_Z
         self.weights += material.weights
         return self
 
     def build(self) -> "Material":
+        """
+        Build material from partition
+        """
         elements = list(
             map(
                 lambda x: self.get_element_from_symbol(x) if isinstance(x, str) else x,
@@ -79,11 +63,12 @@ class MaterialFactory:
     @classmethod
     def from_formula(cls, formula) -> 'Material':
         """
-        Добавляет новую молекулу для расчетов
+        Create material from chemical formula
 
         Parameters
         ----------
-        formula : Chemical formulas for compounds should be entered in standard chemical notation,
+        formula :
+            Chemical formulas for compounds should be entered in standard chemical notation,
             with appropriate upper and lower case. However, because of hardware limitations,
             subscripts must be written on line. For example, the formula for calcium tungstate must be entered as CaWO4.
             Parentheses, spaces and dots may not be used.
@@ -91,7 +76,7 @@ class MaterialFactory:
 
         Returns
         -------
-        material :
+        material : Material
 
         """
         name_list, value_list = [], []
@@ -138,7 +123,7 @@ class MaterialFactory:
         elements = []
         for name in name_list:
             elements.append(MaterialFactory.get_element_from_symbol(name))
-        atomic_mass = MaterialFactory.get_elements_weights(elements)
+        atomic_mass = MaterialFactory.get_elements_mass_list(elements)
 
         weights = []
         for mass, value in zip(atomic_mass, value_list):
@@ -157,12 +142,18 @@ class MaterialFactory:
 
     @classmethod
     def get_element_from_symbol(cls, element: str) -> int:
+        """
+        Get atomic number of element based on symbol
+        """
         if cls.element_symbols is None:
             cls._prepare_element_symbol()
         return cls.element_symbols[element]
 
     @staticmethod
-    def get_element_weight(element) -> float:
+    def get_element_mass(element : int) -> float:
+        """
+        Get element atomic mass in amu
+        """
         if element <= 0 or element > 100:
             raise Exception("Element must be from 1 ot 100")
         with tables.open_file(NIST_XCOM_HDF5_PATH) as h5file:
@@ -171,7 +162,10 @@ class MaterialFactory:
             return table.attrs['AtomicWeight']
 
     @staticmethod
-    def get_elements_weights(elements):
+    def get_elements_mass_list(elements: List[int]) -> List[float]:
+        """
+        Get list of elements atomic mass in amu
+        """
         result = np.zeros(len(elements))
         with tables.open_file(NIST_XCOM_HDF5_PATH) as h5file:
             for indx, element in enumerate(elements):
@@ -183,7 +177,19 @@ class MaterialFactory:
             return result
 
 class Material:
-    def __init__(self, elements, weights = None):
+    """
+    Define material for attenuation calculation
+    """
+    def __init__(self, elements : List[int], weights: Optional[List[float]] = None):
+        """
+        Parameters
+        ----------
+
+        elements : List[int]
+                    List of atomic number of element
+        weigths : Optional[List[float]]
+                    List of mass fraction of elemets, not required for single element
+        """
         self.elements_by_Z = elements
         if weights is not None:
             assert (len(self.elements_by_Z) == len(weights))

@@ -25,6 +25,28 @@ ENERGY_GRID_DEFAULT = np.array([1.0E+03, 1.5E+03, 2.0E+03, 3.0E+03, 4.0E+03, 5.0
 _INTERPOLATOS = Interpolators()
 
 def calculate_attenuation(material: Material, energy: np.ndarray = None):
+    """
+    Calculate attenuation (cm2/gramm) for gamma-ray (at energies between 1 keV and 100 GeV) for next process:
+
+        * Coherent scattering
+        * Incoherent (Compton) scattering
+        * Photoelectric absorption
+        * Pair production in the field of the atomic nucleus and in the field of the atomic electrons
+
+    Based on NIST XCOM data: https://www.nist.gov/pml/xcom-photon-cross-sections-database
+
+    Parameters
+    ----------
+    material
+            special class description simple material or compound
+
+    energy
+            energies of gamma-quanta in eV, used `ENERGY_GRID_DEFAULT` by default
+
+    Returns
+    -------
+    data : ndarray with attenuation in cm2/gramm
+    """
     if not isinstance(material, Material):
         raise Exception("Except material")
 
@@ -34,12 +56,12 @@ def calculate_attenuation(material: Material, energy: np.ndarray = None):
         # Attenutaion coefficient = macro_cross_secction/denisty = \
         # = micro_cross_section/atom_weight[gr]
         # atom_weight[gr] = atom_weight[amu] / AVOGADRO
-        atom_weigth = MaterialFactory.get_element_weight(element)
+        atom_weigth = MaterialFactory.get_element_mass(element)
         for name in data.dtype.names:
             data[name] /= _AVOGADRO / atom_weigth
         return data
     elif len(material) > 1:
-        atom_weights_amu = MaterialFactory.get_elements_weights(material.elements_by_Z)
+        atom_weights_amu = MaterialFactory.get_elements_mass_list(material.elements_by_Z)
         data = calculate_cross_section(material.elements_by_Z[0], energy)
         for name in data.dtype.names:
             data[name] *= ( material.weights[0] * _AVOGADRO / atom_weights_amu[0])
@@ -55,11 +77,22 @@ def calculate_attenuation(material: Material, energy: np.ndarray = None):
 
 def calculate_cross_section(element : Union[int, str], energy: np.ndarray = None) -> np.ndarray:
     """
-    Расчитываем сечения и длинны пробегов для заданной энергии
+    Calculate cross-section (barn/atom) for gamma-ray (at energies between 1 keV and 100 GeV) for next process:
+
+        * Coherent scattering
+        * Incoherent (Compton) scattering
+        * Photoelectric absorption
+        * Pair production in the field of the atomic nucleus and in the field of the atomic electrons
+
+    Based on NIST XCOM data: https://www.nist.gov/pml/xcom-photon-cross-sections-database
 
     Parameters
     ----------
-    energy : energies of gamma-quant, used `ENERGY_GRID_DEFAULT` by default
+    element
+            atomic number or symbol of element
+
+    energy
+            energies of gamma-quanta in eV, used `ENERGY_GRID_DEFAULT` by default
 
     Returns
     -------
