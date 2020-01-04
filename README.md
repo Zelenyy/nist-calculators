@@ -13,7 +13,7 @@ pip install nist-calculators
 
 ## XCOM
 
-See [example](./notebooks/XCOM.ipynb).
+See [example](./examples/XCOM.ipynb).
 
 Usage:
 ```python
