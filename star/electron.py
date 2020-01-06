@@ -2,7 +2,7 @@ import os
 from dataclasses import dataclass
 from enum import auto, Enum
 from typing import List, Union
-
+import logging
 import numpy as np
 import math
 
@@ -393,6 +393,7 @@ def calculate_stopping_power(material: Union[MaterialParameters, PredefinedMater
 
     if isinstance(material, PredefinedMaterials):
         material = DataLoader.load_material(material)
+        logging.debug("Load predefiend material: {}".format(material))
 
     dtype = np.dtype([
         ("energy", "d"),
@@ -426,10 +427,12 @@ def calculate_stopping_power(material: Union[MaterialParameters, PredefinedMater
     data = np.zeros(n ,dtype=dtype)
     data[Names.ENERGY] = np.asarray(energy)
 
-    G = material.wt * material.mz / DATA_ATB[material.mz]
+    G = material.wt * material.mz / DATA_ATB[material.mz-1]
     GTOT = np.sum(G)
     ZAV = GTOT
+    logging.debug("ZAV = " + str(ZAV))
     HOM = 28.81593 * math.sqrt(material.density * ZAV)
+    logging.debug("HOM = " + str(HOM))
     PHIL = 2.0 * math.log(material.ionisation_potential / HOM)
     CBAR = PHIL + 1.0
     G /= GTOT
@@ -453,6 +456,7 @@ def calculate_stopping_power(material: Union[MaterialParameters, PredefinedMater
             EN.append(bd[j])
     F = np.asarray(F)
     EN = np.asarray(EN)
+    logging.debug("EN = " + str(EN))
     RLOSTL = np.log(RLOST)
     #make spline with coeff ARL,BRL,CRL,DRL
     cs_rlostl = CubicSpline(x = ERL, y = RLOSTL)
@@ -473,13 +477,15 @@ def calculate_stopping_power(material: Union[MaterialParameters, PredefinedMater
         ROOT = ROOT - DROOT
         if (abs(DROOT) < 0.00001):
             break
-    FACTOR = math.sqrt(ROOT)
+    # FACTOR = math.sqrt(ROOT) # debug variable in f77
+    logging.debug("ROOT = " + str(ROOT))
     EPS = ROOT*EPS
-
+    logging.debug("EPS = " + str(EPS))
     YCUT = 0.0
+
     if EN[-1] > 0:
         YCUT = 1/np.sum(F/EPS)
-
+    logging.debug("YCUT = " + str(YCUT))
     YQ = np.zeros(LMAX, "d")
     D = np.zeros(LMAX, "d")
 
@@ -489,14 +495,13 @@ def calculate_stopping_power(material: Union[MaterialParameters, PredefinedMater
         sum_ = np.sum(F*np.log(1.0 + Q[i]/(EPS+ALF*F)))
         D[i] = sum_-Q[i]/(YQ[i] + 1.0)
     YQL = np.log(YQ)
-    TCUT = RMASS*(math.sqrt(YCUT +1.0)-1)
+    # TCUT = RMASS*(math.sqrt(YCUT +1.0)-1) # debug value in f77
     cs_D = CubicSpline(x= YQL, y = D)
 
     TAU = energy/RMASS
     Y = TAU*(TAU + 2)
     BETQ = Y / ((TAU + 1.0) ** 2)
-
-    indx = np.logical_and(Y >= YQ[0], Y > YCUT)
+    indx = np.logical_and(Y >= YQ[0], Y > YCUT) # check max energy Y < YQ[-1]
     DELTA = np.zeros(Y.size, "d")
     DELTA[indx] = cs_D(x = np.log(Y)[indx])
     SPART = energy_log - POTL + 0.5*np.log(1+0.5*TAU) - 0.5*DELTA
@@ -531,7 +536,8 @@ def calculate_stopping_power(material: Union[MaterialParameters, PredefinedMater
     RAD /= energy
     data[Names.CSDA_RANGE] = RG
     data[Names.RADIATION_YIELD] = RAD
-
+    # if default grid cat head
+    data = data[16:]
     return data
 
 
