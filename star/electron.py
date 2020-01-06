@@ -1,7 +1,7 @@
 import os
 from dataclasses import dataclass
 from enum import auto, Enum
-from typing import List, Union
+from typing import List, Union, Tuple
 import logging
 import numpy as np
 import math
@@ -351,49 +351,51 @@ ROOT_PATH = os.path.dirname(__file__)
 DATA_PATH = os.path.join(ROOT_PATH, 'data')
 NIST_ESTAR_HDF5_PATH = os.path.join(DATA_PATH, 'NIST_ESTAR.hdf5')
 
-class DataLoader:
 
-    @staticmethod
-    def load_radiation_loss(elements : Union[int, List[int]]) -> np.ndarray:
-        if isinstance(elements, int):
-            elements = [elements]
-        with tables.open_file(NIST_ESTAR_HDF5_PATH) as h5file:
-            table = h5file.get_node(h5file.root, "radiation_loss")
-            coord = np.asarray(elements) - 1
-            data = table.read_coordinates(coord)
-            list_NC = []
-            list_BD = []
-            for element in elements:
-                name = get_z_name(element)
-                array_NC = h5file.get_node("/NC", name).read()
-                array_BD = h5file.get_node("/BD", name).read()
-                list_NC.append(array_NC)
-                list_BD.append(array_BD)
-        return list_NC, list_BD, data
-
-    @staticmethod
-    def load_material(material: PredefinedMaterials):
-        with tables.open_file(NIST_ESTAR_HDF5_PATH) as h5file:
-            table = h5file.get_node(h5file.root, "material_parameters")
-            data = table[material.value - 1]
-            name = get_mat_name(data["id"])
-            composition = h5file.get_node("/composition", name).read()
-        return MaterialParameters(
-            material_name=data["material"],
-            number_of_components=len(composition),
-            zag = data[Names.ZAG],
-            ionisation_potential= data[Names.IONISATION_POTENTIAL],
-            density=data[Names.DENSITY],
-            mz = composition[Names.ELEMENT],
-            wt = composition[Names.FRACTION]
-        )
+def load_radiation_loss(elements : Union[int, List[int]]) -> Tuple[list, list, np.ndarray]:
+    if isinstance(elements, int):
+        elements = [elements]
+    with tables.open_file(NIST_ESTAR_HDF5_PATH) as h5file:
+        table = h5file.get_node(h5file.root, "radiation_loss")
+        coord = np.asarray(elements) - 1
+        data = table.read_coordinates(coord)
+        list_NC = []
+        list_BD = []
+        for element in elements:
+            name = get_z_name(element)
+            array_NC = h5file.get_node("/NC", name).read()
+            array_BD = h5file.get_node("/BD", name).read()
+            list_NC.append(array_NC)
+            list_BD.append(array_BD)
+    return list_NC, list_BD, data
 
 
-def calculate_stopping_power(material: Union[MaterialParameters, PredefinedMaterials], energy=None):
+def load_material(material: PredefinedMaterials):
+    with tables.open_file(NIST_ESTAR_HDF5_PATH) as h5file:
+        table = h5file.get_node(h5file.root, "material_parameters")
+        data = table[material.value - 1]
+        name = get_mat_name(data["id"])
+        composition = h5file.get_node("/composition", name).read()
+    return MaterialParameters(
+        material_name=data["material"],
+        number_of_components=len(composition),
+        zag = data[Names.ZAG],
+        ionisation_potential= data[Names.IONISATION_POTENTIAL],
+        density=data[Names.DENSITY],
+        mz = composition[Names.ELEMENT],
+        wt = composition[Names.FRACTION]
+    )
 
+def calculate_estar_table(material: Union[MaterialParameters, PredefinedMaterials]):
+    """
+     Stopping powers, ranges and radiation yields for standard energy grid
+    """
     if isinstance(material, PredefinedMaterials):
-        material = DataLoader.load_material(material)
+        material = load_material(material)
         logging.debug("Load predefiend material: {}".format(material))
+    else:
+        material.mz = np.asarray(material.mz)
+        material.wt = np.asarray(material.wt)
 
     dtype = np.dtype([
         ("energy", "d"),
@@ -405,7 +407,62 @@ def calculate_stopping_power(material: Union[MaterialParameters, PredefinedMater
         ("density_effect", "d")
     ])
 
-    LKMAX = 113
+    data_stopping_power = calculate_stopping_power(material)
+    data = np.zeros(len(DATA_ER), dtype=dtype)
+    for name in data_stopping_power.dtype.names:
+        data[name] = data_stopping_power[name]
+
+    energy_log = np.log(DATA_ER)
+    # if not user energy
+    cs_rloss= CubicSpline(x= energy_log, y = np.log(data[Names.STOPPING_POWER_RADIATIVE]))
+    cs_tloss = CubicSpline(x = energy_log, y = np.log(data[Names.STOPPING_POWER_TOTAL]))
+
+    n = len(DATA_ER)
+    RG = np.zeros(n, 'd')
+    RAD = np.zeros(n, 'd')
+    RG[0] = 0.5*DATA_ER[0]/data[Names.STOPPING_POWER_TOTAL][0]
+    RAD[0] = 0.5*DATA_ER[0]*data[Names.STOPPING_POWER_RADIATIVE][0]/data[Names.STOPPING_POWER_TOTAL][0]
+    MGRD = 21
+    EDIFF = np.diff(DATA_ER)/(MGRD-1)
+    DET = EDIFF / 3.0
+    for i in range(1, n):
+        ETL = np.log(DATA_ER[i] - EDIFF[i-1] * np.arange(MGRD))
+        GRAND = np.exp(-cs_tloss(x=ETL))
+        GRAND1 = np.exp(cs_rloss(x=ETL))*GRAND
+        STEP = GRAL(DET[i-1],GRAND, MGRD)
+        DRAD = GRAL(DET[i-1],GRAND1, MGRD)
+        RG[i] = RG[i-1] + STEP
+        RAD[i] = RAD[i-1] + DRAD
+    RAD /= DATA_ER
+    data[Names.CSDA_RANGE] = RG
+    data[Names.RADIATION_YIELD] = RAD
+    # if default grid cat head
+    data = data[16:]
+
+    return data
+
+def calculate_stopping_power(material: Union[MaterialParameters, PredefinedMaterials], energy=None) -> np.ndarray:
+    """
+    Stopping powers only, for user-selected energy grid
+    """
+
+    if isinstance(material, PredefinedMaterials):
+        material = load_material(material)
+        logging.debug("Load predefiend material: {}".format(material))
+    else:
+        material.mz = np.asarray(material.mz)
+        material.wt = np.asarray(material.wt)
+
+    dtype = np.dtype([
+        ("energy", "d"),
+        ("stopping_power_collision_delta", "d"),
+        ("stopping_power_radiative", "d"),
+        ("stopping_power_total", "d"),
+        (Names.DENSITY_EFFECT, "d")
+    ])
+
+
+    # LKMAX = 113
     COFF=0.307072
     RMASS = 0.510999906 # electron mass
     NUMQ = 50
@@ -418,7 +475,6 @@ def calculate_stopping_power(material: Union[MaterialParameters, PredefinedMater
         Q[i] = Q[i-1]*QFAC
 
     POTL = math.log(material.ionisation_potential*1e-6)
-    ER = DATA_ER
     ERL = np.log(DATA_ER)
     if energy is None:
         energy = DATA_ER
@@ -437,7 +493,7 @@ def calculate_stopping_power(material: Union[MaterialParameters, PredefinedMater
     CBAR = PHIL + 1.0
     G /= GTOT
 
-    list_NC, list_BD, data_radiation_loss = DataLoader.load_radiation_loss(material.mz)
+    list_NC, list_BD, data_radiation_loss = load_radiation_loss(material.mz)
     RLOST = np.sum((material.wt*data_radiation_loss[Names.STOPPING_POWER_RADIATIVE].T), axis=1)
 
     for nc,bd in zip(list_NC, list_BD):
@@ -512,32 +568,6 @@ def calculate_stopping_power(material: Union[MaterialParameters, PredefinedMater
     data[Names.STOPPING_POWER_RADIATIVE] = np.exp(cs_rlostl(x=energy_log))
     data[Names.STOPPING_POWER_TOTAL] = data[Names.STOPPING_POWER_RADIATIVE] + data[Names.STOPPING_POWER_COLLISION_DELTA]
     data[Names.DENSITY_EFFECT] = DELTA
-
-    # if not user energy
-    cs_rloss= CubicSpline(x= energy_log, y = np.log(data[Names.STOPPING_POWER_RADIATIVE]))
-    cs_tloss = CubicSpline(x = energy_log, y = np.log(data[Names.STOPPING_POWER_TOTAL]))
-
-    n = len(energy)
-    RG = np.zeros(n, 'd')
-    RAD = np.zeros(n, 'd')
-    RG[0] = 0.5*energy[0]/data[Names.STOPPING_POWER_TOTAL][0]
-    RAD[0] = 0.5*energy[0]*data[Names.STOPPING_POWER_RADIATIVE][0]/data[Names.STOPPING_POWER_TOTAL][0]
-    MGRD = 21
-    EDIFF = np.diff(energy)/(MGRD-1)
-    DET = EDIFF / 3.0
-    for i in range(1, n):
-        ETL = np.log(energy[i] - EDIFF[i-1] * np.arange(MGRD))
-        GRAND = np.exp(-cs_tloss(x=ETL))
-        GRAND1 = np.exp(cs_rloss(x=ETL))*GRAND
-        STEP = GRAL(DET[i-1],GRAND, MGRD)
-        DRAD = GRAL(DET[i-1],GRAND1, MGRD)
-        RG[i] = RG[i-1] + STEP
-        RAD[i] = RAD[i-1] + DRAD
-    RAD /= energy
-    data[Names.CSDA_RANGE] = RG
-    data[Names.RADIATION_YIELD] = RAD
-    # if default grid cat head
-    data = data[16:]
     return data
 
 

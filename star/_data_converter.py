@@ -79,7 +79,7 @@ def convert_fcomp_to_table(path):
     dtype_composition = np.dtype(
         [
             (Names.ELEMENT, "i"),
-            (Names.FRACTION, "i")
+            (Names.FRACTION, "d")
         ]
     )
     data_parameters = np.zeros(KMAX, dtype=dtype_parametrs)
@@ -93,9 +93,10 @@ def convert_fcomp_to_table(path):
             number_of_components = int(parameters[0])
             compaund = []
             while True:
-                compaund += fin.readline()[:-1].strip().split()
+                compaund += fin.readline()[:-1].split()
                 if len(compaund) == 2*number_of_components:
                     break
+            # print("Compaund: " + str(compaund[1::2]))
             data_parameters["id"][count] = material_id
             data_parameters["material"][count] = material
             data_parameters["number_of_components"][count] = number_of_components
@@ -118,13 +119,16 @@ def get_mat_name(mat_id):
 def get_z_name(Z):
     return "Z" + str(Z).rjust(3, "0")
 
-def convert_electron_to_hdf5(path):
+def convert_star_to_hdf5(path):
     data_parameters, data_composition = convert_fcomp_to_table(os.path.join(path,"FCOMP"))
     NMAX, list_NC, list_BD, data_radiation_loss = convert_fedat_to_table(
         os.path.join(path, "FEDAT"))
 
 
     with tables.open_file(os.path.join(ROOT_PATH, 'data', 'NIST_ESTAR.hdf5'), "w") as h5file:
+
+
+
         filters = tables.Filters(complevel=3, fletcher32=True)
 
         table = h5file.create_table(h5file.root, "material_parameters", obj=data_parameters, filters=filters)
@@ -150,4 +154,4 @@ def convert_electron_to_hdf5(path):
 if __name__ == '__main__':
     path = sys.argv[1]
     print(path)
-    convert_electron_to_hdf5(path)
+    convert_star_to_hdf5(path)
