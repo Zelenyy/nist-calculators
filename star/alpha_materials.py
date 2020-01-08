@@ -1,7 +1,7 @@
 from enum import Enum, auto
 
 
-class ProtonMaterials(Enum):
+class AlphaMaterials(Enum):
     HYDROGEN = auto()
     HELIUM = auto()
     BERYLLIUM = auto()

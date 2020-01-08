@@ -4,7 +4,7 @@ import sys
 import numpy as np
 import tables
 
-from star.proton_materials import ProtonPredefinedMaterials
+from star.proton_materials import ProtonMaterials
 
 ROOT_PATH = os.path.dirname(__file__)
 DATA_PATH = os.path.join(ROOT_PATH, 'data')
@@ -129,7 +129,7 @@ class ProtonNames:
     PROJECTED_RANGE = "projected_range"
 
 
-def convert_fprot(path):
+def convert_fprot(path, NMAX):
     result = []
     dtype = np.dtype(
         [
@@ -141,10 +141,10 @@ def convert_fprot(path):
     )
     with open(path, newline="") as fin:
         data = list(map(lambda x: float(x), fin.read().split()))
-    DATA_LENGTH = 133
+    DATA_LENGTH = NMAX
     NUMBER_OF_COLS = 4
     start, stop = 0, DATA_LENGTH
-    for material in ProtonPredefinedMaterials:
+    for material in ProtonMaterials:
         array_list = []
         for i in range(NUMBER_OF_COLS):
             array_list.append(data[start:stop])
@@ -194,24 +194,29 @@ def convert_star_to_hdf5(path):
             array.flush()
             array = h5file.create_array(group_BD, name, obj=list_BD[i])
             array.flush()
+        NMAX / 133
+        # PSTAR snd ASTAR DATA
+        parametrs = (
+            ("PSTAR","FPROT","protons" , "ENG.PRO", 133),
+            ("ASTAR","FALPH","helium_ions" , "ENG.ALF", 122))
+        for param in parametrs:
+            star_dir, data_file, particle, energy_file, NMAX = param
+            pstar_path = os.path.join(path, star_dir)
+            data_fprot = convert_fprot(os.path.join(pstar_path, data_file), NMAX)
+            pstar_group = h5file.create_group(h5file.root, particle, title="Data for {}".format(star_dir))
+            for material, data in data_fprot:
+                table = h5file.create_table(pstar_group, material.name, filters=filters, obj = data, title="{} stopping-power table for {}".format(particle, material.name))
+                table.attrs["cdsa_range_unit"] = "g/cm2"
+                table.attrs[ProtonNames.ELECTRONIC_STOPPING_POWER + "_unit"] = "MeV cm2/g"
+                table.attrs[ProtonNames.NUCLEAR_STOPPING_POWER + "_unit"] = "MeV cm2/g"
+                table.flush()
 
-        # PSTAR DATA
-        pstar_path = os.path.join(path, "PSTAR")
-        data_fprot = convert_fprot(os.path.join(pstar_path, "FPROT"))
-        pstar_group = h5file.create_group(h5file.root, "protons", title="Data for PSTAR")
-        for material, data in data_fprot:
-            table = h5file.create_table(pstar_group, material.name, filters=filters, obj = data, title="Protons stopping-power table for {}".format(material.name))
-            table.attrs["cdsa_range_unit"] = "g/cm2"
-            table.attrs[ProtonNames.ELECTRONIC_STOPPING_POWER + "_unit"] = "MeV cm2/g"
-            table.attrs[ProtonNames.NUCLEAR_STOPPING_POWER + "_unit"] = "MeV cm2/g"
-            table.flush()
-
-        with open(os.path.join(pstar_path, "ENG.PRO"), newline="") as fin:
-            energy = map(lambda x: float(x), fin.read().split()[1:])
-            energy = np.fromiter(energy, "d")
-            array = h5file.create_array(pstar_group, "energy", obj=energy, title="Default energy of protons (corresponds to data in another table)")
-            array.attrs["unit"] = "MeV"
-            array.flush()
+            with open(os.path.join(pstar_path, energy_file), newline="") as fin:
+                energy = map(lambda x: float(x), fin.read().split()[1:])
+                energy = np.fromiter(energy, "d")
+                array = h5file.create_array(pstar_group, "energy", obj=energy, title="Default energy of {} (corresponds to data in another table)".format(particle))
+                array.attrs["unit"] = "MeV"
+                array.flush()
 
 
 if __name__ == '__main__':

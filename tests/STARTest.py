@@ -2,7 +2,7 @@ import logging
 import unittest
 
 import star
-from star import ProtonPredefinedMaterials, ProtonSTARCalculator
+from star import ProtonMaterials, ProtonSTARCalculator
 from star.electron import PredefinedMaterials
 
 
@@ -21,10 +21,10 @@ class STARCase(unittest.TestCase):
             star.electron.calculate_estar_table(material)
 
     def test_proton(self):
-        material = ProtonPredefinedMaterials.BERYLLIUM
+        material = ProtonMaterials.BERYLLIUM
         calculator = ProtonSTARCalculator(material)
 
     def test_proton_all(self):
-        for material in ProtonPredefinedMaterials:
+        for material in ProtonMaterials:
             calculator = ProtonSTARCalculator(material)
             calculator.calculate_table()

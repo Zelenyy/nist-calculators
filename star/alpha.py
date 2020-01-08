@@ -4,18 +4,18 @@ import numpy as np
 import tables
 
 from star._data_converter import NIST_STAR_HDF5_PATH, ProtonNames, Names
-from star.proton_materials import ProtonMaterials
+from star.alpha_materials import AlphaMaterials
 from xcom.interpolators import make_log_log_spline
 
 
-class ProtonSTARCalculator:
+class AlphaSTARCalculator:
 
-    def __init__(self, material: ProtonMaterials):
+    def __init__(self, material: AlphaMaterials):
         """
 
         """
         with tables.open_file(NIST_STAR_HDF5_PATH) as h5file:
-            group = tables.Group(h5file.root, "protons")
+            group = tables.Group(h5file.root, "helium_ions")
             data = h5file.get_node(group, material.name).read()
             energy = h5file.get_node(group, "energy").read()
             self.default_energy = energy
@@ -29,7 +29,7 @@ class ProtonSTARCalculator:
         Parameters
         ----------
         energy
-                energies of protons in `MeV`, used `self.default_energy` by default
+                energies of helium ions in `MeV`, used `self.default_energy` by default
         Returns
         -------
         data : ndarray with  CSDA ranges, in `g/cm2`
@@ -45,7 +45,7 @@ class ProtonSTARCalculator:
         Parameters
         ----------
         energy
-                energies of protons in `MeV`, used `self.default_energy` by default
+                energies of helium ions in `MeV`, used `self.default_energy` by default
         Returns
         -------
         data : ndarray with  detour factors
@@ -61,7 +61,7 @@ class ProtonSTARCalculator:
         Parameters
         ----------
         energy
-                energies of protons in `MeV`, used `self.default_energy` by default
+                energies of helium ions in `MeV`, used `self.default_energy` by default
         Returns
         -------
         data : ndarray with projected range, `g/cm2`
@@ -77,7 +77,7 @@ class ProtonSTARCalculator:
         Parameters
         ----------
         energy
-                energies of protons in `MeV`, used `self.default_energy` by default
+                energies of helium ions in `MeV`, used `self.default_energy` by default
         Returns
         -------
         data : ndarray with  electronic stopping powers, in `MeV cm2/g`
@@ -93,7 +93,7 @@ class ProtonSTARCalculator:
         Parameters
         ----------
         energy
-                energies of protons in `MeV`, used `self.default_energy` by default
+                energies of helium ions in `MeV`, used `self.default_energy` by default
         Returns
         -------
         data : ndarray with  nuclear stopping powers, in `MeV cm2/g`
@@ -109,7 +109,7 @@ class ProtonSTARCalculator:
         Parameters
         ----------
         energy
-                energies of protons in `MeV`, used `self.default_energy` by default
+                energies of helium ions in `MeV`, used `self.default_energy` by default
         Returns
         -------
         data : ndarray with  total stopping powers, in `MeV cm2/g`
@@ -133,7 +133,7 @@ class ProtonSTARCalculator:
                 Parameters
         ----------
         energy
-                energies of protons in `MeV`, used `self.default_energy` by default
+                energies of helium ions in `MeV`, used `self.default_energy` by default
         Returns
         -------
         data : record ndarray with  all data
