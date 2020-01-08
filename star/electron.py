@@ -1,11 +1,10 @@
-import os
+import logging
+import math
 from dataclasses import dataclass
 from enum import auto, Enum
 from typing import List, Union, Tuple
-import logging
-import numpy as np
-import math
 
+import numpy as np
 import tables
 from scipy.interpolate import CubicSpline
 
@@ -334,27 +333,26 @@ class PredefinedMaterials(Enum):
     XYLEN = auto()
     GRAPHITE = auto()  # (density 1.7 g / cm3)
 
+
 @dataclass
 class MaterialParameters:
     material_name: str
-    number_of_components : int
-    zag : float # Z/A
-    ionisation_potential : float # eV
-    density : float # gram/cm3
-    mz : List[int]
+    number_of_components: int
+    zag: float  # Z/A
+    ionisation_potential: float  # eV
+    density: float  # gram/cm3
+    mz: List[int]
     wt: List[float]
 
     def potl(self):
-        return math.log(self.ionisation_potential*1e-6)
+        return math.log(self.ionisation_potential * 1e-6)
 
 
-
-
-def load_radiation_loss(elements : Union[int, List[int]]) -> Tuple[list, list, np.ndarray]:
+def load_radiation_loss(elements: Union[int, List[int]]) -> Tuple[list, list, np.ndarray]:
     if isinstance(elements, int):
         elements = [elements]
     with tables.open_file(NIST_STAR_HDF5_PATH) as h5file:
-        electron_group =tables.Group(h5file.root, "electrons")
+        electron_group = tables.Group(h5file.root, "electrons")
         table = h5file.get_node(electron_group, "radiation_loss")
         coord = np.asarray(elements) - 1
         data = table.read_coordinates(coord)
@@ -378,16 +376,32 @@ def load_material(material: PredefinedMaterials):
     return MaterialParameters(
         material_name=data["material"],
         number_of_components=len(composition),
-        zag = data[Names.ZAG],
-        ionisation_potential= data[Names.IONISATION_POTENTIAL],
+        zag=data[Names.ZAG],
+        ionisation_potential=data[Names.IONISATION_POTENTIAL],
         density=data[Names.DENSITY],
-        mz = composition[Names.ELEMENT],
-        wt = composition[Names.FRACTION]
+        mz=composition[Names.ELEMENT],
+        wt=composition[Names.FRACTION]
     )
+
 
 def calculate_estar_table(material: Union[MaterialParameters, PredefinedMaterials]):
     """
-     Stopping powers, ranges and radiation yields for standard energy grid
+     Stopping powers, ranges and radiation yields for standard energy grid. Return next columns:
+        * Kinetic energy, `MeV`
+        * Stopping power collision delta, `MeV cm2/g`
+        * Stopping power radiative, `MeV cm2/g`
+        * Stopping power total, `MeV cm2/g`
+        * CSDA range, `g/cm2`
+        * Radiation yield,
+        * Density effect parameter delta
+
+    Parameters
+    ----------
+    material
+            special class description material or predefined material from `PredefinedMaterials` enumerations
+    Returns
+    -------
+    data : ndarray with all data
     """
     if isinstance(material, PredefinedMaterials):
         material = load_material(material)
@@ -410,39 +424,50 @@ def calculate_estar_table(material: Union[MaterialParameters, PredefinedMaterial
     data = np.zeros(len(DATA_ER), dtype=dtype)
     for name in data_stopping_power.dtype.names:
         data[name] = data_stopping_power[name]
-
     energy_log = np.log(DATA_ER)
-    # if not user energy
-    cs_rloss= CubicSpline(x= energy_log, y = np.log(data[Names.STOPPING_POWER_RADIATIVE]))
-    cs_tloss = CubicSpline(x = energy_log, y = np.log(data[Names.STOPPING_POWER_TOTAL]))
-
+    cs_rloss = CubicSpline(x=energy_log, y=np.log(data[Names.STOPPING_POWER_RADIATIVE]))
+    cs_tloss = CubicSpline(x=energy_log, y=np.log(data[Names.STOPPING_POWER_TOTAL]))
     n = len(DATA_ER)
     RG = np.zeros(n, 'd')
     RAD = np.zeros(n, 'd')
-    RG[0] = 0.5*DATA_ER[0]/data[Names.STOPPING_POWER_TOTAL][0]
-    RAD[0] = 0.5*DATA_ER[0]*data[Names.STOPPING_POWER_RADIATIVE][0]/data[Names.STOPPING_POWER_TOTAL][0]
+    RG[0] = 0.5 * DATA_ER[0] / data[Names.STOPPING_POWER_TOTAL][0]
+    RAD[0] = 0.5 * DATA_ER[0] * data[Names.STOPPING_POWER_RADIATIVE][0] / data[Names.STOPPING_POWER_TOTAL][0]
     MGRD = 21
-    EDIFF = np.diff(DATA_ER)/(MGRD-1)
+    EDIFF = np.diff(DATA_ER) / (MGRD - 1)
     DET = EDIFF / 3.0
     for i in range(1, n):
-        ETL = np.log(DATA_ER[i] - EDIFF[i-1] * np.arange(MGRD))
+        ETL = np.log(DATA_ER[i] - EDIFF[i - 1] * np.arange(MGRD))
         GRAND = np.exp(-cs_tloss(x=ETL))
-        GRAND1 = np.exp(cs_rloss(x=ETL))*GRAND
-        STEP = GRAL(DET[i-1],GRAND, MGRD)
-        DRAD = GRAL(DET[i-1],GRAND1, MGRD)
-        RG[i] = RG[i-1] + STEP
-        RAD[i] = RAD[i-1] + DRAD
+        GRAND1 = np.exp(cs_rloss(x=ETL)) * GRAND
+        STEP = GRAL(DET[i - 1], GRAND, MGRD)
+        DRAD = GRAL(DET[i - 1], GRAND1, MGRD)
+        RG[i] = RG[i - 1] + STEP
+        RAD[i] = RAD[i - 1] + DRAD
     RAD /= DATA_ER
     data[Names.CSDA_RANGE] = RG
     data[Names.RADIATION_YIELD] = RAD
-    # if default grid cat head
+    # default grid cat head
     data = data[16:]
-
     return data
+
 
 def calculate_stopping_power(material: Union[MaterialParameters, PredefinedMaterials], energy=None) -> np.ndarray:
     """
-    Stopping powers only, for user-selected energy grid
+    Stopping powers only, for user-selected energy grid.
+    Return next columns:
+        * Kinetic energy, `MeV`
+        * Stopping power collision delta, `MeV cm2/g`
+        * Stopping power radiative, `MeV cm2/g`
+        * Stopping power total, `MeV cm2/g`
+        * Density effect parameter delta
+
+    Parameters
+    ----------
+    material
+            special class description material or predefined material from `PredefinedMaterials` enumerations
+    Returns
+    -------
+    data : ndarray with all data
     """
 
     if isinstance(material, PredefinedMaterials):
@@ -460,29 +485,28 @@ def calculate_stopping_power(material: Union[MaterialParameters, PredefinedMater
         (Names.DENSITY_EFFECT, "d")
     ])
 
-
     # LKMAX = 113
-    COFF=0.307072
-    RMASS = 0.510999906 # electron mass
+    COFF = 0.307072
+    RMASS = 0.510999906  # electron mass
     NUMQ = 50
     LMAX = 1101
     QBEG = 1.0e-4
-    QFAC = 10**(1/NUMQ)
+    QFAC = 10 ** (1 / NUMQ)
     Q = np.zeros(LMAX, "d")
     Q[0] = QBEG
-    for i in range(1,LMAX):
-        Q[i] = Q[i-1]*QFAC
+    for i in range(1, LMAX):
+        Q[i] = Q[i - 1] * QFAC
 
-    POTL = math.log(material.ionisation_potential*1e-6)
+    POTL = math.log(material.ionisation_potential * 1e-6)
     ERL = np.log(DATA_ER)
     if energy is None:
         energy = DATA_ER
-    energy_log =np.log(energy)
+    energy_log = np.log(energy)
     n = len(energy)
-    data = np.zeros(n ,dtype=dtype)
+    data = np.zeros(n, dtype=dtype)
     data[Names.ENERGY] = np.asarray(energy)
 
-    G = material.wt * material.mz / DATA_ATB[material.mz-1]
+    G = material.wt * material.mz / DATA_ATB[material.mz - 1]
     GTOT = np.sum(G)
     ZAV = GTOT
     logging.debug("ZAV = " + str(ZAV))
@@ -493,12 +517,12 @@ def calculate_stopping_power(material: Union[MaterialParameters, PredefinedMater
     G /= GTOT
 
     list_NC, list_BD, data_radiation_loss = load_radiation_loss(material.mz)
-    RLOST = np.sum((material.wt*data_radiation_loss[Names.STOPPING_POWER_RADIATIVE].T), axis=1)
+    RLOST = np.sum((material.wt * data_radiation_loss[Names.STOPPING_POWER_RADIATIVE].T), axis=1)
 
-    for nc,bd in zip(list_NC, list_BD):
+    for nc, bd in zip(list_NC, list_BD):
         if nc[-1] < 0:
             nc[-1] = -nc[-1]
-            if material.number_of_components<=1:
+            if material.number_of_components <= 1:
                 bd[-1] = 0.0
     sum_ = np.array([np.sum(nc) for nc in list_NC])
 
@@ -507,93 +531,93 @@ def calculate_stopping_power(material: Union[MaterialParameters, PredefinedMater
         nc = list_NC[i]
         bd = list_BD[i]
         for j in range(len(nc)):
-            F.append(nc[j]*G[i]/sum_[i])
+            F.append(nc[j] * G[i] / sum_[i])
             EN.append(bd[j])
     F = np.asarray(F)
     EN = np.asarray(EN)
     logging.debug("EN = " + str(EN))
     RLOSTL = np.log(RLOST)
-    #make spline with coeff ARL,BRL,CRL,DRL
-    cs_rlostl = CubicSpline(x = ERL, y = RLOSTL)
+    # make spline with coeff ARL,BRL,CRL,DRL
+    cs_rlostl = CubicSpline(x=ERL, y=RLOSTL)
 
     nmax = sum([len(x) for x in list_NC])
-    ALF = np.repeat(2.0/3.0, nmax)
-    if EN[-1] <=0:
+    ALF = np.repeat(2.0 / 3.0, nmax)
+    if EN[-1] <= 0:
         ALF[-1] = 1.0
-    EPS = (EN/HOM)**2
+    EPS = (EN / HOM) ** 2
     ROOT = 1.0
     while True:
         FUN = -PHIL
         DER = 0.0
-        TRM = ROOT*EPS + ALF*F
-        FUN += np.sum(F*np.log(TRM))
-        DER += np.sum(F*EPS/TRM)
+        TRM = ROOT * EPS + ALF * F
+        FUN += np.sum(F * np.log(TRM))
+        DER += np.sum(F * EPS / TRM)
         DROOT = FUN / DER
         ROOT = ROOT - DROOT
         if (abs(DROOT) < 0.00001):
             break
     # FACTOR = math.sqrt(ROOT) # debug variable in f77
     logging.debug("ROOT = " + str(ROOT))
-    EPS = ROOT*EPS
+    EPS = ROOT * EPS
     logging.debug("EPS = " + str(EPS))
     YCUT = 0.0
 
     if EN[-1] > 0:
-        YCUT = 1/np.sum(F/EPS)
+        YCUT = 1 / np.sum(F / EPS)
     logging.debug("YCUT = " + str(YCUT))
     YQ = np.zeros(LMAX, "d")
     D = np.zeros(LMAX, "d")
 
     for i in range(0, LMAX):
-        sum_ = np.sum(F/(EPS + Q[i]))
-        YQ[i] = 1/sum_
-        sum_ = np.sum(F*np.log(1.0 + Q[i]/(EPS+ALF*F)))
-        D[i] = sum_-Q[i]/(YQ[i] + 1.0)
+        sum_ = np.sum(F / (EPS + Q[i]))
+        YQ[i] = 1 / sum_
+        sum_ = np.sum(F * np.log(1.0 + Q[i] / (EPS + ALF * F)))
+        D[i] = sum_ - Q[i] / (YQ[i] + 1.0)
     YQL = np.log(YQ)
     # TCUT = RMASS*(math.sqrt(YCUT +1.0)-1) # debug value in f77
-    cs_D = CubicSpline(x= YQL, y = D)
+    cs_D = CubicSpline(x=YQL, y=D)
 
-    TAU = energy/RMASS
-    Y = TAU*(TAU + 2)
+    TAU = energy / RMASS
+    Y = TAU * (TAU + 2)
     BETQ = Y / ((TAU + 1.0) ** 2)
-    indx = np.logical_and(Y >= YQ[0], Y > YCUT) # check max energy Y < YQ[-1]
+    indx = np.logical_and(Y >= YQ[0], Y > YCUT)  # check max energy Y < YQ[-1]
     DELTA = np.zeros(Y.size, "d")
-    DELTA[indx] = cs_D(x = np.log(Y)[indx])
-    SPART = energy_log - POTL + 0.5*np.log(1+0.5*TAU) - 0.5*DELTA
+    DELTA[indx] = cs_D(x=np.log(Y)[indx])
+    SPART = energy_log - POTL + 0.5 * np.log(1 + 0.5 * TAU) - 0.5 * DELTA
     TERM = (1.0 - BETQ) * (1.0 + (TAU ** 2) / 8.0 - (2.0 * TAU + 1.0) * math.log(2.0))
     STNUM = SPART + 0.5 * TERM
 
-    data[Names.STOPPING_POWER_COLLISION_DELTA] = COFF*ZAV*STNUM/BETQ
+    data[Names.STOPPING_POWER_COLLISION_DELTA] = COFF * ZAV * STNUM / BETQ
     data[Names.STOPPING_POWER_RADIATIVE] = np.exp(cs_rlostl(x=energy_log))
     data[Names.STOPPING_POWER_TOTAL] = data[Names.STOPPING_POWER_RADIATIVE] + data[Names.STOPPING_POWER_COLLISION_DELTA]
     data[Names.DENSITY_EFFECT] = DELTA
     return data
 
 
-def GRAL(DELTA,G,N):
-      NL1 = N-1
-      NL2 = N-2
-      if N % 2 == 1:
-        if N-1<=0:
+def GRAL(DELTA, G, N):
+    NL1 = N - 1
+    NL2 = N - 2
+    if N % 2 == 1:
+        if N - 1 <= 0:
             SIGMA = 0.0
-        elif N-3 <=0:
+        elif N - 3 <= 0:
             SIGMA = G[0] + 4.0 * G[1] + G[2]
         else:
-            SUM4=np.sum(G[1:NL1-1:2])
-            SUM2 = np.sum(G[2:NL2-1:2])
-            SIGMA = G[0] + 4.0 * SUM4 + 2.0 * SUM2 + G[N-1]
-      else:
-          if N - 2 <= 0:
-              SIGMA =1.5*(G[0] + G[1])
-          elif N - 4 <= 0:
-              SIGMA = 1.125*(G[0] + 3.0 * G[1] + 3.0* G[2] + G[3])
-          elif N - 6 <= 0:
-              SIGMA = G[0] + 3.875 * G[1] + 2.625*G[2] + 2.625*G[3]+  3.875 * G[4]+G[5]
-          elif N - 8 <= 0:
-              SIGMA = G[0] + 3.875 * G[1] + 2.625*G[2] + 2.625*G[3] + 3.875 * G[4]+ 2*G[5]+4*G[6]+G[7]
-          else:
-              SIG6 = G[0] + 3.875 * G[1] + 2.625 * G[2] + 2.625 * G[3] + 3.875 * G[4] + G[5]
-              SUM4 = np.sum(G[6:NL1-1:2])
-              SUM2 = np.sum(G[7:NL2-1:2])
-              SIGMA = SIG6 + G[7] + 4.0 * SUM4 + 2.0 * SUM2 + G[N-1]
-      return DELTA * SIGMA
+            SUM4 = np.sum(G[1:NL1 - 1:2])
+            SUM2 = np.sum(G[2:NL2 - 1:2])
+            SIGMA = G[0] + 4.0 * SUM4 + 2.0 * SUM2 + G[N - 1]
+    else:
+        if N - 2 <= 0:
+            SIGMA = 1.5 * (G[0] + G[1])
+        elif N - 4 <= 0:
+            SIGMA = 1.125 * (G[0] + 3.0 * G[1] + 3.0 * G[2] + G[3])
+        elif N - 6 <= 0:
+            SIGMA = G[0] + 3.875 * G[1] + 2.625 * G[2] + 2.625 * G[3] + 3.875 * G[4] + G[5]
+        elif N - 8 <= 0:
+            SIGMA = G[0] + 3.875 * G[1] + 2.625 * G[2] + 2.625 * G[3] + 3.875 * G[4] + 2 * G[5] + 4 * G[6] + G[7]
+        else:
+            SIG6 = G[0] + 3.875 * G[1] + 2.625 * G[2] + 2.625 * G[3] + 3.875 * G[4] + G[5]
+            SUM4 = np.sum(G[6:NL1 - 1:2])
+            SUM2 = np.sum(G[7:NL2 - 1:2])
+            SIGMA = SIG6 + G[7] + 4.0 * SUM4 + 2.0 * SUM2 + G[N - 1]
+    return DELTA * SIGMA
