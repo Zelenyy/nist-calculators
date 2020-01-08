@@ -13,7 +13,7 @@ PYTABLES_MIN_VERSION = '3.5.1'
 
 setuptools.setup(
     name="nist-calculators",
-    version="0.0.3",
+    version="0.0.4",
     author="Mikhail Zelenyi",
     author_email="mihail.zelenyy@phystech.edu",
     url='http://npm.mipt.ru/',
@@ -22,7 +22,7 @@ setuptools.setup(
     long_description=long_description,
     long_description_content_type="text/markdown",
     keywords="gamma-ray, cross-section, xcom",
-    packages=["xcom"],
+    packages=["xcom", "star"],
     classifiers=(
         "Programming Language :: Python :: 3",
         "License :: OSI Approved :: MIT License",
@@ -42,6 +42,6 @@ setuptools.setup(
     test_suite='tests',
     package_data = {
         'xcom' : ["data/NIST_XCOM.hdf5"],
-        'star' : ["data/NIST_XCOM.hdf5"]
+        'star' : ["data/NIST_STAR.hdf5"]
     }
 )
