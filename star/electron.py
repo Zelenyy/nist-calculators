@@ -9,7 +9,7 @@ import math
 import tables
 from scipy.interpolate import CubicSpline
 
-from star._data_converter import Names, get_mat_name, get_z_name
+from star._data_converter import Names, get_mat_name, get_z_name, NIST_STAR_HDF5_PATH
 
 DATA_ATB = np.array([
     1.00794, 4.002602, 6.941, 9.012182, 10.811, 12.011,
@@ -347,31 +347,30 @@ class MaterialParameters:
     def potl(self):
         return math.log(self.ionisation_potential*1e-6)
 
-ROOT_PATH = os.path.dirname(__file__)
-DATA_PATH = os.path.join(ROOT_PATH, 'data')
-NIST_ESTAR_HDF5_PATH = os.path.join(DATA_PATH, 'NIST_ESTAR.hdf5')
+
 
 
 def load_radiation_loss(elements : Union[int, List[int]]) -> Tuple[list, list, np.ndarray]:
     if isinstance(elements, int):
         elements = [elements]
-    with tables.open_file(NIST_ESTAR_HDF5_PATH) as h5file:
-        table = h5file.get_node(h5file.root, "radiation_loss")
+    with tables.open_file(NIST_STAR_HDF5_PATH) as h5file:
+        electron_group =tables.Group(h5file.root, "electrons")
+        table = h5file.get_node(electron_group, "radiation_loss")
         coord = np.asarray(elements) - 1
         data = table.read_coordinates(coord)
         list_NC = []
         list_BD = []
         for element in elements:
             name = get_z_name(element)
-            array_NC = h5file.get_node("/NC", name).read()
-            array_BD = h5file.get_node("/BD", name).read()
+            array_NC = h5file.get_node(tables.Group(electron_group, "NC"), name).read()
+            array_BD = h5file.get_node(tables.Group(electron_group, "BD"), name).read()
             list_NC.append(array_NC)
             list_BD.append(array_BD)
     return list_NC, list_BD, data
 
 
 def load_material(material: PredefinedMaterials):
-    with tables.open_file(NIST_ESTAR_HDF5_PATH) as h5file:
+    with tables.open_file(NIST_STAR_HDF5_PATH) as h5file:
         table = h5file.get_node(h5file.root, "material_parameters")
         data = table[material.value - 1]
         name = get_mat_name(data["id"])

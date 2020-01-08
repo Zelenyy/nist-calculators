@@ -1,9 +1,5 @@
-from enum import Enum
 from typing import Union
-
 import numpy as np
-
-# PERIODIC_TABLE_PATH = os.path.join(DATA_PATH, 'periodic_table.csv')
 from ._data_converter import NameProcess
 from .interpolators import Material, Interpolators, MaterialFactory
 

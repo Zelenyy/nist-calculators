@@ -7,6 +7,7 @@ from scipy.interpolate import CubicSpline, interp1d
 
 from ._data_converter import NameProcess
 
+
 ROOT_PATH = os.path.dirname(__file__)
 DATA_PATH = os.path.join(ROOT_PATH, 'data')
 NIST_XCOM_HDF5_PATH = os.path.join(DATA_PATH, 'NIST_XCOM.hdf5')
@@ -204,29 +205,14 @@ class Material:
 
 
 
-def _interpolateLogLog( x: np.ndarray, y: np.ndarray) -> Callable[[np.ndarray], np.ndarray]:
+def make_log_log_spline(x: np.ndarray, y: np.ndarray) -> Callable[[np.ndarray], np.ndarray]:
     """
-
-    Parameters
-    ----------
-    x
-    y
-
-    Returns
-    -------
-
+    Create spline of
     """
     x = np.log(x)
     y = np.log(y)
     cs = CubicSpline(x=x, y=y)
-
-    def makeSpliner(cs):
-        def spliner(x: np.ndarray) -> np.ndarray:
-            return np.exp(cs(np.log(x)))
-
-        return spliner
-
-    return makeSpliner(cs)
+    return lambda x : np.exp(cs(np.log(x)))
 
 
 def _interpolateAbsorptionEdge(data) -> Callable[[np.ndarray], np.ndarray]:
@@ -280,13 +266,13 @@ def _interpolatePair( x: np.ndarray, y: np.ndarray, treshold: float) -> Callable
 
 
 def create_coherent_interpolator( data: np.ndarray) -> Callable[[np.ndarray], np.ndarray]:
-    return _interpolateLogLog(data[NameProcess.ENERGY],
-                              data[NameProcess.COHERENT])
+    return make_log_log_spline(data[NameProcess.ENERGY],
+                               data[NameProcess.COHERENT])
 
 
 def create_incoherent_interpolator( data: np.ndarray) -> Callable[[np.ndarray], np.ndarray]:
-    return _interpolateLogLog(data[NameProcess.ENERGY],
-                              data[NameProcess.INCOHERENT])
+    return make_log_log_spline(data[NameProcess.ENERGY],
+                               data[NameProcess.INCOHERENT])
 
 
 def create_pair_atom_interpolator( data: np.ndarray) -> Callable[[np.ndarray], np.ndarray]:
@@ -305,8 +291,8 @@ def create_photoelectric_interpolator(data: np.ndarray, absorption_edge = False)
     if absorption_edge:
         return _interpolateAbsorptionEdge(data)
     else:
-        return _interpolateLogLog(data[NameProcess.ENERGY],
-                                  data[NameProcess.PHOTOELECTRIC])
+        return make_log_log_spline(data[NameProcess.ENERGY],
+                                   data[NameProcess.PHOTOELECTRIC])
 
 
 class Interpolators:
