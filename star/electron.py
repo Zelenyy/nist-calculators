@@ -358,10 +358,12 @@ def load_radiation_loss(elements: Union[int, List[int]]) -> Tuple[list, list, np
         data = table.read_coordinates(coord)
         list_NC = []
         list_BD = []
+        group_NC = tables.Group(electron_group, "NC")
+        group_BD = tables.Group(electron_group, "BD")
         for element in elements:
             name = get_z_name(element)
-            array_NC = h5file.get_node(tables.Group(electron_group, "NC"), name).read()
-            array_BD = h5file.get_node(tables.Group(electron_group, "BD"), name).read()
+            array_NC = h5file.get_node(group_NC, name).read()
+            array_BD = h5file.get_node(group_BD, name).read()
             list_NC.append(array_NC)
             list_BD.append(array_BD)
     return list_NC, list_BD, data

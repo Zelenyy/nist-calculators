@@ -11,6 +11,9 @@ class STARCase(unittest.TestCase):
         logging.root.setLevel(logging.DEBUG)
         data = star.electron.calculate_stopping_power(PredefinedMaterials.HYDROGEN)
 
+    def test_electron_2(self):
+        data = star.electron.calculate_stopping_power(PredefinedMaterials.A_150_TISSUE_EQUIVALENT_PLASTIC)
+
     def test_electron_table(self):
         logging.root.setLevel(logging.DEBUG)
         data = star.electron.calculate_estar_table(PredefinedMaterials.HYDROGEN)

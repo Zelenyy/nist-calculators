@@ -13,7 +13,7 @@ PYTABLES_MIN_VERSION = '3.5.1'
 
 setuptools.setup(
     name="nist-calculators",
-    version="0.0.4",
+    version="0.0.5",
     author="Mikhail Zelenyi",
     author_email="mihail.zelenyy@phystech.edu",
     url='http://npm.mipt.ru/',
