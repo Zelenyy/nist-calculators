@@ -54,7 +54,7 @@ def calculate_attenuation(material: Material, energy: np.ndarray = None):
         # atom_weight[gr] = atom_weight[amu] / AVOGADRO
         atom_weigth = MaterialFactory.get_element_mass(element)
         for name in data.dtype.names:
-            data[name] /= _AVOGADRO / atom_weigth
+            if name != "energy": data[name] *= (_AVOGADRO / atom_weigth)
         return data
     elif len(material) > 1:
         atom_weights_amu = MaterialFactory.get_elements_mass_list(material.elements_by_Z)
