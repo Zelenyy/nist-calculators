@@ -13,8 +13,8 @@ DATA_PATH = os.path.join(ROOT_PATH, 'data')
 NIST_XCOM_HDF5_PATH = os.path.join(DATA_PATH, 'NIST_XCOM.hdf5')
 PERIODIC_TABLE_PATH = os.path.join(DATA_PATH, "PeriodicTableofElements.csv")
 
-_TRESHOLD_PAIR_ELECTRON = 2.044014E+06  # eV
-_TRESHOLD_PAIR_ATOM = 1.022007E+06  # eV
+_THRESHOLD_PAIR_ELECTRON = 2.044014E+06  # eV
+_THRESHOLD_PAIR_ATOM = 1.022007E+06  # eV
 
 
 class MaterialFactory:
@@ -211,7 +211,7 @@ def make_log_log_spline(x: np.ndarray, y: np.ndarray) -> Callable[[np.ndarray], 
     """
     x = np.log(x)
     y = np.log(y)
-    cs = CubicSpline(x=x, y=y)
+    cs = CubicSpline(x=x, y=y, bc_type='natural')
     return lambda x: np.exp(cs(np.log(x)))
 
 
@@ -219,10 +219,10 @@ def _interpolateAbsorptionEdge(data) -> Callable[[np.ndarray], np.ndarray]:
     data, h5file, group = data
 
     data_K = h5file.get_node(group, "K").read()
-    cubicSplineTreshold = np.max(data_K[NameProcess.ENERGY]) * 1e6
+    cubicSplineThreshold = np.max(data_K[NameProcess.ENERGY]) * 1e6
     x = np.log(data[NameProcess.ENERGY])
     y = np.log(data[NameProcess.PHOTOELECTRIC])
-    indx = x > np.log(cubicSplineTreshold)
+    indx = x > np.log(cubicSplineThreshold)
     cs = CubicSpline(x[indx], y[indx])
 
     indx = np.logical_not(indx)
@@ -231,7 +231,7 @@ def _interpolateAbsorptionEdge(data) -> Callable[[np.ndarray], np.ndarray]:
 
     def spliner(x: np.ndarray) -> np.ndarray:
         x = np.log(x)
-        indx = x > np.log(cubicSplineTreshold)
+        indx = x > np.log(cubicSplineThreshold)
         y = np.zeros(x.shape[0])
         y[indx] = cs(x[indx])
         indx = np.logical_not(indx)
@@ -241,18 +241,16 @@ def _interpolateAbsorptionEdge(data) -> Callable[[np.ndarray], np.ndarray]:
     return spliner
 
 
-def make_pair_interpolator(x: np.ndarray, y: np.ndarray, treshold: float) -> Callable[[np.ndarray], np.ndarray]:
-    x = (1 - (x / treshold)) ** 3
-    indx = y > 0
-    x = x[indx][::-1]
-    y = np.log(y[indx])[::-1]
-    cs = CubicSpline(x=x, y=y)
+def make_pair_interpolator(x: np.ndarray, y: np.ndarray, threshold: float) -> Callable[[np.ndarray], np.ndarray]:
+    indx = x > threshold
+    cs = CubicSpline(x=np.log(x[indx]),
+                     y=np.log(y[indx] / (x[indx]*(x[indx] - threshold))**3),
+                     bc_type='natural')
 
-    def spliner(x: np.ndarray) -> np.ndarray:
-        x = (1 - (x / treshold)) ** 3
-        indx = x <= 0
-        y = np.zeros(x.shape[0])
-        y[indx] = np.exp(cs(x[indx]))
+    def spliner(xx: np.ndarray) -> np.ndarray:
+        indx = (xx > threshold)
+        y = np.zeros(xx.shape[0])
+        y[indx] = np.exp(cs(np.log(xx[indx]))) * (xx[indx]*(xx[indx] - threshold))**3
         return y
 
     return spliner
@@ -271,13 +269,13 @@ def create_incoherent_interpolator(data: np.ndarray) -> Callable[[np.ndarray], n
 def create_pair_atom_interpolator(data: np.ndarray) -> Callable[[np.ndarray], np.ndarray]:
     return make_pair_interpolator(data[NameProcess.ENERGY],
                                   data[NameProcess.PAIR_ATOM],
-                                  treshold=_TRESHOLD_PAIR_ATOM)
+                                  threshold=_THRESHOLD_PAIR_ATOM)
 
 
 def create_pair_electron_interpolator(data: np.ndarray) -> Callable[[np.ndarray], np.ndarray]:
     return make_pair_interpolator(data[NameProcess.ENERGY],
                                   data[NameProcess.PAIR_ELECTRON],
-                                  treshold=_TRESHOLD_PAIR_ELECTRON)
+                                  threshold=_THRESHOLD_PAIR_ELECTRON)
 
 
 def create_photoelectric_interpolator(data: np.ndarray, absorption_edge=False) -> Callable[[np.ndarray], np.ndarray]:
