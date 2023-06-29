@@ -207,7 +207,7 @@ class Material:
 
 def make_log_log_spline(x: np.ndarray, y: np.ndarray) -> Callable[[np.ndarray], np.ndarray]:
     """
-    Create spline of
+    Create spline of log-log data
     """
     x = np.log(x)
     y = np.log(y)
@@ -220,22 +220,21 @@ def _interpolateAbsorptionEdge(data) -> Callable[[np.ndarray], np.ndarray]:
 
     data_K = h5file.get_node(group, "K").read()
     cubicSplineThreshold = np.max(data_K[NameProcess.ENERGY]) * 1e6
-    x = np.log(data[NameProcess.ENERGY])
-    y = np.log(data[NameProcess.PHOTOELECTRIC])
-    indx = x > np.log(cubicSplineThreshold)
-    cs = CubicSpline(x[indx], y[indx])
-
-    indx = np.logical_not(indx)
-    # print(x[indx], y[indx])
-    linear = interp1d(x[indx], y[indx], kind='linear')
+    x = data[NameProcess.ENERGY]
+    y = data[NameProcess.PHOTOELECTRIC]
+    indx = x > cubicSplineThreshold
+    cs = CubicSpline(np.log(x[indx]),
+                     np.log(y[indx]),
+                     bc_type='natural')
+    linear = interp1d(np.log(x[~indx]),
+                      np.log(y[~indx]),
+                      kind='linear')
 
     def spliner(x: np.ndarray) -> np.ndarray:
-        x = np.log(x)
-        indx = x > np.log(cubicSplineThreshold)
+        indx = x > cubicSplineThreshold
         y = np.zeros(x.shape[0])
-        y[indx] = cs(x[indx])
-        indx = np.logical_not(indx)
-        y[indx] = linear(x[indx])
+        y[indx] = cs(np.log(x[indx]))
+        y[~indx] = linear(np.log(x[~indx]))
         return np.exp(y)
 
     return spliner
