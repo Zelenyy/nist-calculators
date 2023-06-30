@@ -1,3 +1,4 @@
+"""Interpolators for tabulated data"""
 import csv
 import os
 from typing import Callable, List, Union, Optional
@@ -72,9 +73,11 @@ class MaterialFactory:
         formula :
             Chemical formulas for compounds should be entered in standard chemical notation,
             with appropriate upper and lower case. However, because of hardware limitations,
-            subscripts must be written on line. For example, the formula for calcium tungstate must be entered as CaWO4.
+            subscripts must be written on line. For example, the formula for calcium tungstate
+            must be entered as CaWO4.
             Parentheses, spaces and dots may not be used.
-            For example, the formula for calcium phosphate must be entered as Ca3P2O8 (and not as Ca3(PO4)2).
+            For example, the formula for calcium phosphate must be entered as Ca3P2O8 (and
+            not as Ca3(PO4)2).
 
         Returns
         -------
@@ -96,30 +99,31 @@ class MaterialFactory:
                     name_list.append(s)
                     value_list.append(1)
                     break
+
+                if formula[i].isdigit():
+                    name_list.append(s)
+                elif formula[i].isupper():
+                    name_list.append(s)
+                    value_list.append(1)
                 else:
-                    if formula[i].isdigit():
-                        name_list.append(s)
-                    elif formula[i].isupper():
-                        name_list.append(s)
+                    name_list.append(s + formula[i])
+                    i += 1
+                    if i == n:
                         value_list.append(1)
-                    else:
-                        name_list.append(s + formula[i])
-                        i += 1
-                        if i == n:
-                            value_list.append(1)
-                            break
-                        elif formula[i].isupper():
-                            value_list.append(1)
+                        break
+
+                    if formula[i].isupper():
+                        value_list.append(1)
             elif s.isdigit():
                 value += s
                 i += 1
                 if i == n:
                     value_list.append(int(value))
                     break
-                else:
-                    if formula[i].isupper():
-                        value_list.append(int(value))
-                        value = ''
+
+                if formula[i].isupper():
+                    value_list.append(int(value))
+                    value = ''
             else:
                 break
         elements = []
@@ -135,7 +139,7 @@ class MaterialFactory:
     @classmethod
     def _prepare_element_symbol(cls):
         cls.element_symbols = {}
-        with open(PERIODIC_TABLE_PATH, newline='') as csvfile:
+        with open(PERIODIC_TABLE_PATH, newline='', encoding='UTF-8') as csvfile:
             reader = csv.reader(csvfile, delimiter=",")
             next(reader)
             for row in reader:
@@ -157,9 +161,9 @@ class MaterialFactory:
         Get element atomic mass in amu
         """
         if element <= 0 or element > 100:
-            raise Exception("Element must be from 1 ot 100")
+            raise ValueError("Element must be from 1 ot 100")
         with tables.open_file(NIST_XCOM_HDF5_PATH) as h5file:
-            group_name = "/Z{}".format(str(element).rjust(3, '0'))
+            group_name = f"/Z{str(element).rjust(3, '0')}"
             table = h5file.get_node(group_name, "data")
             return table.attrs['AtomicWeight']
 
@@ -172,8 +176,8 @@ class MaterialFactory:
         with tables.open_file(NIST_XCOM_HDF5_PATH) as h5file:
             for indx, element in enumerate(elements):
                 if element <= 0 or element > 100:
-                    raise Exception("Element must be from 1 ot 100")
-                group_name = "/Z{}".format(str(element).rjust(3, '0'))
+                    raise ValueError("Element must be from 1 ot 100")
+                group_name = f"/Z{str(element).rjust(3, '0')}"
                 table = h5file.get_node(group_name, "data")
                 result[indx] = table.attrs['AtomicWeight']
             return result
@@ -191,8 +195,8 @@ class Material:
 
         elements : List[int]
                     List of atomic number of element
-        weigths : Optional[List[float]]
-                    List of mass fraction of elemets, not required for single element
+        weights : Optional[List[float]]
+                    List of mass fraction of elements, not required for single element
         """
         self.elements_by_Z = elements
         if weights is not None:
@@ -223,12 +227,9 @@ def _interpolateAbsorptionEdge(data) -> Callable[[np.ndarray], np.ndarray]:
     x = data[NameProcess.ENERGY]
     y = data[NameProcess.PHOTOELECTRIC]
     indx = x > cubicSplineThreshold
-    cs = CubicSpline(np.log(x[indx]),
-                     np.log(y[indx]),
-                     bc_type='natural')
-    linear = interp1d(np.log(x[~indx]),
-                      np.log(y[~indx]),
-                      kind='linear')
+
+    cs = CubicSpline(np.log(x[indx]), np.log(y[indx]), bc_type='natural')
+    linear = interp1d(np.log(x[~indx]), np.log(y[~indx]), kind='linear')
 
     def spliner(x: np.ndarray) -> np.ndarray:
         indx = x > cubicSplineThreshold
@@ -240,52 +241,63 @@ def _interpolateAbsorptionEdge(data) -> Callable[[np.ndarray], np.ndarray]:
     return spliner
 
 
-def make_pair_interpolator(x: np.ndarray, y: np.ndarray, threshold: float) -> Callable[[np.ndarray], np.ndarray]:
+def make_pair_interpolator(x: np.ndarray, y: np.ndarray,
+                           threshold: float) -> Callable[[np.ndarray], np.ndarray]:
+    """
+    Create spline of linearized log-log data
+    """
     indx = x > threshold
     cs = CubicSpline(x=np.log(x[indx]),
                      y=np.log(y[indx] / (x[indx]*(x[indx] - threshold))**3),
                      bc_type='natural')
 
-    def spliner(xx: np.ndarray) -> np.ndarray:
-        indx = (xx > threshold)
-        y = np.zeros(xx.shape[0])
-        y[indx] = np.exp(cs(np.log(xx[indx]))) * (xx[indx]*(xx[indx] - threshold))**3
+    def spliner(x: np.ndarray) -> np.ndarray:
+        indx = x > threshold
+        y = np.zeros(x.shape[0])
+        y[indx] = np.exp(cs(np.log(x[indx]))) * (x[indx]*(x[indx] - threshold))**3
         return y
 
     return spliner
 
 
 def create_coherent_interpolator(data: np.ndarray) -> Callable[[np.ndarray], np.ndarray]:
+    """Create interpolator for coherent scattering from tabulated data"""
     return make_log_log_spline(data[NameProcess.ENERGY],
                                data[NameProcess.COHERENT])
 
 
 def create_incoherent_interpolator(data: np.ndarray) -> Callable[[np.ndarray], np.ndarray]:
+    """Create interpolator for incoherent scattering from tabulated data"""
     return make_log_log_spline(data[NameProcess.ENERGY],
                                data[NameProcess.INCOHERENT])
 
 
 def create_pair_atom_interpolator(data: np.ndarray) -> Callable[[np.ndarray], np.ndarray]:
+    """Create interpolator for pair production by an atomic nucleus from tabulated data"""
     return make_pair_interpolator(data[NameProcess.ENERGY],
                                   data[NameProcess.PAIR_ATOM],
                                   threshold=_THRESHOLD_PAIR_ATOM)
 
 
 def create_pair_electron_interpolator(data: np.ndarray) -> Callable[[np.ndarray], np.ndarray]:
+    """Create interpolator for pair production by an electron from tabulated data"""
     return make_pair_interpolator(data[NameProcess.ENERGY],
                                   data[NameProcess.PAIR_ELECTRON],
                                   threshold=_THRESHOLD_PAIR_ELECTRON)
 
 
-def create_photoelectric_interpolator(data: np.ndarray, absorption_edge=False) -> Callable[[np.ndarray], np.ndarray]:
+def create_photoelectric_interpolator(data: np.ndarray,
+                                      absorption_edge=False) -> Callable[[np.ndarray], np.ndarray]:
+    """Create interpolator for photoelectric absorption from tabulated data"""
     if absorption_edge:
         return _interpolateAbsorptionEdge(data)
-    else:
-        return make_log_log_spline(data[NameProcess.ENERGY],
-                                   data[NameProcess.PHOTOELECTRIC])
+
+    return make_log_log_spline(data[NameProcess.ENERGY],
+                               data[NameProcess.PHOTOELECTRIC])
 
 
 class Interpolators:
+    """Class for interpolating functions from tabulated cross-section data"""
     def __init__(self):
         self.cache = {}
         self.h5file = tables.open_file(NIST_XCOM_HDF5_PATH)
@@ -294,12 +306,13 @@ class Interpolators:
         self.h5file.close()
 
     def get_interpolators(self, element: int):
+        """Create interpolators for the provided element"""
         if element <= 0 or element > 100:
-            raise Exception("Element must be from 1 ot 100")
+            raise ValueError("Element must be from 1 ot 100")
         try:
             return self.cache[element]
         except KeyError:
-            group_name = "/Z{}".format(str(element).rjust(3, '0'))
+            group_name = f"/Z{str(element).rjust(3, '0')}"
             table = self.h5file.get_node(group_name, "data")
             data = table.read()
             if table.attrs['AbsorptionEdge']:
@@ -312,8 +325,10 @@ class Interpolators:
                 NameProcess.INCOHERENT: create_incoherent_interpolator(data),
                 NameProcess.PAIR_ELECTRON: create_pair_electron_interpolator(data),
                 NameProcess.PAIR_ATOM: create_pair_atom_interpolator(data),
-                NameProcess.PHOTOELECTRIC: create_photoelectric_interpolator(data_phot, absorption_edge=table.attrs[
-                    'AbsorptionEdge'])
+                NameProcess.PHOTOELECTRIC:
+                    create_photoelectric_interpolator(data_phot,
+                                                      absorption_edge=table.attrs[
+                                                          'AbsorptionEdge'])
             }
             self.cache[element] = temp
             return temp
