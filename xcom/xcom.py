@@ -116,5 +116,5 @@ def calculate_cross_section(element : Union[int, str], energy: np.ndarray = None
     for k, v in _INTERPOLATOS.get_interpolators(element).items():
         data[k] = v(data["energy"])
         data["total"] += data[k]
-    data["total_without_coherent"] -= data[NameProcess.COHERENT]
+    data["total_without_coherent"] = data["total"] - data[NameProcess.COHERENT]
     return data
