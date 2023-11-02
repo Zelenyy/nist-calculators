@@ -2,6 +2,7 @@
 import csv
 import os
 from typing import Callable, List, Union, Optional
+import warnings
 
 import numpy as np
 import tables
@@ -213,10 +214,23 @@ def make_log_log_spline(x: np.ndarray, y: np.ndarray) -> Callable[[np.ndarray], 
     """
     Create spline of log-log data
     """
-    x = np.log(x)
-    y = np.log(y)
-    cs = CubicSpline(x=x, y=y, bc_type='natural')
-    return lambda x: np.exp(cs(np.log(x)))
+    log_x = np.log(x)
+    log_y = np.log(y)
+    cs = CubicSpline(x=log_x, y=log_y, bc_type='natural')
+    linear = interp1d(x=log_x, y=log_y,
+                      kind='linear', fill_value="extrapolate")
+
+    def spliner(x_sample: np.ndarray) -> np.ndarray:
+        if np.min(x_sample) < np.min(x) or np.max(x_sample) < np.max(x):
+            warnings.warn("Energy requested is outside of tabulated data, "+
+                          "using linear extrapolation", UserWarning)
+        return np.where(
+            np.logical_and(x_sample > np.min(x), x_sample < np.max(x)),
+            np.exp(cs(np.log(x_sample))),  # Use cubic within data range
+            np.exp(linear(np.log(x_sample)))  # Extrapolate with linear
+            )
+
+    return spliner
 
 
 def _interpolateAbsorptionEdge(data) -> Callable[[np.ndarray], np.ndarray]:
@@ -229,14 +243,18 @@ def _interpolateAbsorptionEdge(data) -> Callable[[np.ndarray], np.ndarray]:
     indx = x > cubicSplineThreshold
 
     cs = CubicSpline(np.log(x[indx]), np.log(y[indx]), bc_type='natural')
-    linear = interp1d(np.log(x[~indx]), np.log(y[~indx]), kind='linear')
+    linear = interp1d(np.log(x), np.log(y),
+                      kind='linear', fill_value="extrapolate")
 
-    def spliner(x: np.ndarray) -> np.ndarray:
-        indx = x > cubicSplineThreshold
-        y = np.zeros(x.shape[0])
-        y[indx] = cs(np.log(x[indx]))
-        y[~indx] = linear(np.log(x[~indx]))
-        return np.exp(y)
+    def spliner(x_sample: np.ndarray) -> np.ndarray:
+        if np.min(x_sample) < np.min(x) or np.max(x_sample) < np.max(x):
+            warnings.warn("Energy requested is outside of tabulated data, "+
+                          "using linear extrapolation", UserWarning)
+        return np.where(
+            np.logical_and(x_sample > cubicSplineThreshold, x_sample < np.max(x)),
+            np.exp(cs(np.log(x_sample))),
+            np.exp(linear(np.log(x_sample)))
+        )
 
     return spliner
 
@@ -250,11 +268,20 @@ def make_pair_interpolator(x: np.ndarray, y: np.ndarray,
     cs = CubicSpline(x=np.log(x[indx]),
                      y=np.log(y[indx] / (x[indx]*(x[indx] - threshold))**3),
                      bc_type='natural')
+    linear = interp1d(x=np.log(x[indx]), y=np.log(y[indx]),
+                      kind='linear', fill_value='extrapolate')
 
-    def spliner(x: np.ndarray) -> np.ndarray:
-        indx = x > threshold
-        y = np.zeros(x.shape[0])
-        y[indx] = np.exp(cs(np.log(x[indx]))) * (x[indx]*(x[indx] - threshold))**3
+    def spliner(x_sample: np.ndarray) -> np.ndarray:
+        if np.max(x_sample) < np.max(x):
+            warnings.warn("Energy requested is outside of tabulated data, "+
+                          "using linear extrapolation", UserWarning)
+        indx = x_sample > threshold
+        y = np.zeros(x_sample.shape[0])
+        y[indx] = np.where(
+            x_sample[indx] < np.max(x),
+            np.exp(cs(np.log(x_sample[indx]))) * (x_sample[indx]*(x_sample[indx] - threshold))**3,
+            np.exp(linear(np.log(x_sample[indx])))
+        )
         return y
 
     return spliner
