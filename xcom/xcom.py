@@ -47,22 +47,25 @@ def calculate_attenuation(material: Material, energy: np.ndarray = None):
         raise Exception("Except material")
 
     if len(material) == 1:
+        # Single constituent material
         element = material.elements_by_Z[0]
         data = calculate_cross_section(element, energy)
         # Attenutaion coefficient = macro_cross_secction/denisty = \
         # = micro_cross_section/atom_weight[gr]
         # atom_weight[gr] = atom_weight[amu] / AVOGADRO
-        atom_weigth = MaterialFactory.get_element_mass(element)
+        atom_weight = MaterialFactory.get_element_mass(element)
         for name in data.dtype.names:
-            if name != "energy": data[name] *= (_AVOGADRO / atom_weigth)
+            if name != "energy": data[name] *= (_AVOGADRO / atom_weight)
         return data
     elif len(material) > 1:
+        # Mixture of materials
         atom_weights_amu = MaterialFactory.get_elements_mass_list(material.elements_by_Z)
+        # Initialize data with data for first element
         data = calculate_cross_section(material.elements_by_Z[0], energy)
         for name in data.dtype.names:
             if name != "energy": data[name] *= ( material.weights[0] * _AVOGADRO / atom_weights_amu[0])
-
-        for atom_weight_amu, element, weight in zip(atom_weights_amu[1:], material.elements_by_Z[1:], material.weights):
+        # Add in other elements
+        for atom_weight_amu, element, weight in zip(atom_weights_amu[1:], material.elements_by_Z[1:], material.weights[1:]):
             temp = calculate_cross_section(element, energy)
             for name in data.dtype.names:
                 if name != "energy": data[name] +=  temp[name] * weight * _AVOGADRO / atom_weight_amu
