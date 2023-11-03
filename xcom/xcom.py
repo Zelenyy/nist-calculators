@@ -1,3 +1,8 @@
+"""
+XCOM attenuation coefficients
+
+Based on NIST XCOM data: https://www.nist.gov/pml/xcom-photon-cross-sections-database
+"""
 from typing import Union
 import numpy as np
 from ._data_converter import NameProcess
@@ -18,16 +23,18 @@ ENERGY_GRID_DEFAULT = np.array([1.0E+03, 1.5E+03, 2.0E+03, 3.0E+03, 4.0E+03, 5.0
                                 6.0E+09, 8.0E+09, 1.0E+10, 1.5E+10, 2.0E+10, 3.0E+10, 4.0E+10,
                                 5.0E+10, 6.0E+10, 8.0E+10, 1.0E+11], dtype='d')
 
-_INTERPOLATOS = Interpolators()
+_INTERPOLATORS = Interpolators()
 
 def calculate_attenuation(material: Material, energy: np.ndarray = None):
     """
-    Calculate attenuation (cm2/gramm) for gamma-ray (at energies between 1 keV and 100 GeV) for next process:
+    Calculate attenuation (cm2/gram) for gamma-ray (at energies between 1 keV
+    and 100 GeV) for next process:
 
         * Coherent scattering
         * Incoherent (Compton) scattering
         * Photoelectric absorption
-        * Pair production in the field of the atomic nucleus and in the field of the atomic electrons
+        * Pair production in the field of the atomic nucleus and in the field of
+          the atomic electrons
 
     Based on NIST XCOM data: https://www.nist.gov/pml/xcom-photon-cross-sections-database
 
@@ -41,21 +48,22 @@ def calculate_attenuation(material: Material, energy: np.ndarray = None):
 
     Returns
     -------
-    data : ndarray with attenuation in cm2/gramm
+    data : ndarray with attenuation in cm2/gram
     """
     if not isinstance(material, Material):
-        raise Exception("Except material")
+        raise ValueError("Except material")
 
     if len(material) == 1:
         # Single constituent material
         element = material.elements_by_Z[0]
         data = calculate_cross_section(element, energy)
-        # Attenutaion coefficient = macro_cross_secction/denisty = \
+        # Attenuation coefficient = macro_cross_section/density = \
         # = micro_cross_section/atom_weight[gr]
         # atom_weight[gr] = atom_weight[amu] / AVOGADRO
         atom_weight = MaterialFactory.get_element_mass(element)
         for name in data.dtype.names:
-            if name != "energy": data[name] *= (_AVOGADRO / atom_weight)
+            if name != "energy":
+                data[name] *= (_AVOGADRO / atom_weight)
         return data
     elif len(material) > 1:
         # Mixture of materials
@@ -63,25 +71,31 @@ def calculate_attenuation(material: Material, energy: np.ndarray = None):
         # Initialize data with data for first element
         data = calculate_cross_section(material.elements_by_Z[0], energy)
         for name in data.dtype.names:
-            if name != "energy": data[name] *= ( material.weights[0] * _AVOGADRO / atom_weights_amu[0])
+            if name != "energy":
+                data[name] *= ( material.weights[0] * _AVOGADRO / atom_weights_amu[0])
         # Add in other elements
-        for atom_weight_amu, element, weight in zip(atom_weights_amu[1:], material.elements_by_Z[1:], material.weights[1:]):
+        for atom_weight_amu, element, weight in zip(atom_weights_amu[1:],
+                                                    material.elements_by_Z[1:],
+                                                    material.weights[1:]):
             temp = calculate_cross_section(element, energy)
             for name in data.dtype.names:
-                if name != "energy": data[name] +=  temp[name] * weight * _AVOGADRO / atom_weight_amu
+                if name != "energy":
+                    data[name] += temp[name] * weight * _AVOGADRO / atom_weight_amu
         return data
     else:
-        raise Exception("Empty material")
+        raise ValueError("Empty material")
 
 
 def calculate_cross_section(element : Union[int, str], energy: np.ndarray = None) -> np.ndarray:
     """
-    Calculate cross-section (barn/atom) for gamma-ray (at energies between 1 keV and 100 GeV) for next process:
+    Calculate cross-section (barn/atom) for gamma-ray (at energies between 1 keV
+    and 100 GeV) for next process:
 
         * Coherent scattering
         * Incoherent (Compton) scattering
         * Photoelectric absorption
-        * Pair production in the field of the atomic nucleus and in the field of the atomic electrons
+        * Pair production in the field of the atomic nucleus and in the field of
+          the atomic electrons
 
     Based on NIST XCOM data: https://www.nist.gov/pml/xcom-photon-cross-sections-database
 
@@ -116,7 +130,7 @@ def calculate_cross_section(element : Union[int, str], energy: np.ndarray = None
     data = np.zeros(n, dtype=dtype)
     data["energy"] = np.asarray(energy)
 
-    for k, v in _INTERPOLATOS.get_interpolators(element).items():
+    for k, v in _INTERPOLATORS.get_interpolators(element).items():
         data[k] = v(data["energy"])
         data["total"] += data[k]
     data["total_without_coherent"] = data["total"] - data[NameProcess.COHERENT]
