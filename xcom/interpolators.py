@@ -6,7 +6,7 @@ import warnings
 
 import numpy as np
 import tables
-from scipy.interpolate import CubicSpline, interp1d
+from scipy.interpolate import interp1d, PchipInterpolator  #, CubicSpline
 
 from ._data_converter import NameProcess
 
@@ -240,7 +240,8 @@ def make_log_log_spline(x: np.ndarray, y: np.ndarray) -> Callable[[np.ndarray], 
     """
     log_x = np.log(x)
     log_y = np.log(y)
-    cs = CubicSpline(x=log_x, y=log_y, bc_type='natural')
+    # cs = CubicSpline(x=log_x, y=log_y, bc_type='natural')
+    cs = PchipInterpolator(x=log_x, y=log_y)
     linear = interp1d(x=log_x, y=log_y,
                       kind='linear', fill_value="extrapolate")
 
@@ -253,6 +254,7 @@ def make_log_log_spline(x: np.ndarray, y: np.ndarray) -> Callable[[np.ndarray], 
             np.exp(cs(np.log(x_sample))),  # Use cubic within data range
             np.exp(linear(np.log(x_sample)))  # Extrapolate with linear
             )
+        # return np.exp(linear(np.log(x_sample)))  # Extrapolate with linear
 
     return spliner
 
@@ -266,7 +268,8 @@ def _interpolateAbsorptionEdge(data) -> Callable[[np.ndarray], np.ndarray]:
     y = data[NameProcess.PHOTOELECTRIC]
     indx = x > cubicSplineThreshold
 
-    cs = CubicSpline(np.log(x[indx]), np.log(y[indx]), bc_type='natural')
+    # cs = CubicSpline(np.log(x[indx]), np.log(y[indx]), bc_type='natural')
+    cs = PchipInterpolator(np.log(x[indx]), np.log(y[indx]))
     linear = interp1d(np.log(x), np.log(y),
                       kind='linear', fill_value="extrapolate")
 
@@ -279,6 +282,7 @@ def _interpolateAbsorptionEdge(data) -> Callable[[np.ndarray], np.ndarray]:
             np.exp(cs(np.log(x_sample))),
             np.exp(linear(np.log(x_sample)))
         )
+        # return np.exp(linear(np.log(x_sample)))
 
     return spliner
 
@@ -289,10 +293,13 @@ def make_pair_interpolator(x: np.ndarray, y: np.ndarray,
     Create spline of linearized log-log data
     """
     indx = x > threshold
-    cs = CubicSpline(x=np.log(x[indx]),
-                     y=np.log(y[indx] / (x[indx]*(x[indx] - threshold))**3),
-                     bc_type='natural')
-    linear = interp1d(x=np.log(x[indx]), y=np.log(y[indx]),
+    # cs = CubicSpline(x=np.log(x[indx]),
+    #                  y=np.log(y[indx] / (x[indx]*(x[indx] - threshold))**3),
+    #                  bc_type='natural')
+    cs = PchipInterpolator(x=np.log(x[indx]),
+                     y=np.log(y[indx] / (x[indx]*(x[indx] - threshold))**3))
+    linear = interp1d(x=np.log(x[indx]),
+                      y=np.log(y[indx] / (x[indx]*(x[indx] - threshold))**3),
                       kind='linear', fill_value='extrapolate')
 
     def spliner(x_sample: np.ndarray) -> np.ndarray:
@@ -304,7 +311,7 @@ def make_pair_interpolator(x: np.ndarray, y: np.ndarray,
         y[indx] = np.where(
             x_sample[indx] < np.max(x),
             np.exp(cs(np.log(x_sample[indx]))) * (x_sample[indx]*(x_sample[indx] - threshold))**3,
-            np.exp(linear(np.log(x_sample[indx])))
+            np.exp(linear(np.log(x_sample[indx]))) * (x_sample[indx]*(x_sample[indx] - threshold))**3
         )
         return y
 
