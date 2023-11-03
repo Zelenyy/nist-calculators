@@ -138,6 +138,31 @@ class MaterialFactory:
         return Material(elements, weights)
 
     @classmethod
+    def mix_materials(cls, list_of_materials:list['Material'], weights:list[float]) -> 'Material':
+        """
+        Mix together existing materials.
+        """
+        components = {}
+        for material_id, material in enumerate(list_of_materials):
+            for element, weight in zip(material.elements_by_Z, material.weights):
+                components[element] = components.get(element, 0) + weight*weights[material_id]
+        new_elements_by_Z = list(components.keys())
+        new_weights = list(components.values())
+        return Material(new_elements_by_Z, new_weights)
+
+    @classmethod
+    def mix_formulas(cls, list_of_formulas:list[str], weights:list[float]) -> 'Material':
+        """
+        Mix together formulas.
+        """
+        list_of_materials = []
+
+        for formula in list_of_formulas:
+            list_of_materials.append(MaterialFactory.from_formula(formula))
+
+        return cls.mix_materials(list_of_materials=list_of_materials, weights=weights)
+
+    @classmethod
     def _prepare_element_symbol(cls):
         cls.element_symbols = {}
         with open(PERIODIC_TABLE_PATH, newline='', encoding='UTF-8') as csvfile:
@@ -208,29 +233,6 @@ class Material:
 
     def __len__(self):
         return len(self.elements_by_Z)
-
-def mix_materials(list_of_materials:list[Material], weights:list[float]) -> Material:
-    """
-    Mix together existing materials.
-    """
-    components = {}
-    for material_id, material in enumerate(list_of_materials):
-        for element, weight in zip(material.elements_by_Z, material.weights):
-            components[element] = components.get(element, 0) + weight*weights[material_id]
-    new_elements_by_Z = list(components.keys())
-    new_weights = list(components.values())
-    return Material(new_elements_by_Z, new_weights)
-
-def mix_formulas(list_of_formulas:list[str], weights:list[float]) -> Material:
-    """
-    Mix together formulas.
-    """
-    list_of_materials = []
-
-    for formula in list_of_formulas:
-        list_of_materials.append(MaterialFactory.from_formula(formula))
-
-    return mix_materials(list_of_materials=list_of_materials, weights=weights)
 
 def make_log_log_spline(x: np.ndarray, y: np.ndarray) -> Callable[[np.ndarray], np.ndarray]:
     """
