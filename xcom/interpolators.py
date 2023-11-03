@@ -138,12 +138,12 @@ class MaterialFactory:
         return Material(elements, weights)
 
     @classmethod
-    def mix_materials(cls, list_of_materials:list['Material'], weights:list[float]) -> 'Material':
+    def mix_materials(cls, materials:list['Material'], weights:list[float]) -> 'Material':
         """
         Mix together existing materials.
         """
         components = {}
-        for material_id, material in enumerate(list_of_materials):
+        for material_id, material in enumerate(materials):
             for element, weight in zip(material.elements_by_Z, material.weights):
                 components[element] = components.get(element, 0) + weight*weights[material_id]
         new_elements_by_Z = list(components.keys())
@@ -151,16 +151,16 @@ class MaterialFactory:
         return Material(new_elements_by_Z, new_weights)
 
     @classmethod
-    def mix_formulas(cls, list_of_formulas:list[str], weights:list[float]) -> 'Material':
+    def mix_formulas(cls, formulas:list[str], weights:list[float]) -> 'Material':
         """
         Mix together formulas.
         """
-        list_of_materials = []
+        materials = []
 
-        for formula in list_of_formulas:
-            list_of_materials.append(MaterialFactory.from_formula(formula))
+        for formula in formulas:
+            materials.append(MaterialFactory.from_formula(formula))
 
-        return cls.mix_materials(list_of_materials=list_of_materials, weights=weights)
+        return cls.mix_materials(materials=materials, weights=weights)
 
     @classmethod
     def _prepare_element_symbol(cls):
