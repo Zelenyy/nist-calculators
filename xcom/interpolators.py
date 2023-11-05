@@ -234,7 +234,11 @@ class Material:
     def __len__(self):
         return len(self.elements_by_Z)
 
-def make_log_log_spline(x: np.ndarray, y: np.ndarray) -> Callable[[np.ndarray], np.ndarray]:
+def make_log_log_spline(
+    x: np.ndarray,
+    y: np.ndarray,
+    warn:bool = False
+    ) -> Callable[[np.ndarray], np.ndarray]:
     """
     Create spline of log-log data
     """
@@ -246,7 +250,7 @@ def make_log_log_spline(x: np.ndarray, y: np.ndarray) -> Callable[[np.ndarray], 
                       kind='linear', fill_value="extrapolate")
 
     def spliner(x_sample: np.ndarray) -> np.ndarray:
-        if np.min(x_sample) < np.min(x) or np.max(x_sample) < np.max(x):
+        if (np.min(x_sample) < np.min(x) or np.max(x_sample) < np.max(x)) and warn:
             warnings.warn("Energy requested is outside of tabulated data, "+
                           "using linear extrapolation", UserWarning)
         return np.where(
@@ -259,7 +263,10 @@ def make_log_log_spline(x: np.ndarray, y: np.ndarray) -> Callable[[np.ndarray], 
     return spliner
 
 
-def _interpolateAbsorptionEdge(data) -> Callable[[np.ndarray], np.ndarray]:
+def _interpolateAbsorptionEdge(
+    data,
+    warn:bool = False
+    ) -> Callable[[np.ndarray], np.ndarray]:
     data, h5file, group = data
 
     data_K = h5file.get_node(group, "K").read()
@@ -274,7 +281,7 @@ def _interpolateAbsorptionEdge(data) -> Callable[[np.ndarray], np.ndarray]:
                       kind='linear', fill_value="extrapolate")
 
     def spliner(x_sample: np.ndarray) -> np.ndarray:
-        if np.min(x_sample) < np.min(x) or np.max(x_sample) < np.max(x):
+        if (np.min(x_sample) < np.min(x) or np.max(x_sample) < np.max(x)) and warn:
             warnings.warn("Energy requested is outside of tabulated data, "+
                           "using linear extrapolation", UserWarning)
         return np.where(
@@ -287,8 +294,12 @@ def _interpolateAbsorptionEdge(data) -> Callable[[np.ndarray], np.ndarray]:
     return spliner
 
 
-def make_pair_interpolator(x: np.ndarray, y: np.ndarray,
-                           threshold: float) -> Callable[[np.ndarray], np.ndarray]:
+def make_pair_interpolator(
+    x: np.ndarray,
+    y: np.ndarray,
+    threshold: float,
+    warn:bool = False
+    ) -> Callable[[np.ndarray], np.ndarray]:
     """
     Create spline of linearized log-log data
     """
@@ -303,7 +314,7 @@ def make_pair_interpolator(x: np.ndarray, y: np.ndarray,
                       kind='linear', fill_value='extrapolate')
 
     def spliner(x_sample: np.ndarray) -> np.ndarray:
-        if np.max(x_sample) < np.max(x):
+        if (np.max(x_sample) < np.max(x)) and warn:
             warnings.warn("Energy requested is outside of tabulated data, "+
                           "using linear extrapolation", UserWarning)
         indx = x_sample > threshold
@@ -318,40 +329,60 @@ def make_pair_interpolator(x: np.ndarray, y: np.ndarray,
     return spliner
 
 
-def create_coherent_interpolator(data: np.ndarray) -> Callable[[np.ndarray], np.ndarray]:
+def create_coherent_interpolator(
+    data: np.ndarray,
+    warn:bool = False
+    ) -> Callable[[np.ndarray], np.ndarray]:
     """Create interpolator for coherent scattering from tabulated data"""
     return make_log_log_spline(data[NameProcess.ENERGY],
-                               data[NameProcess.COHERENT])
+                               data[NameProcess.COHERENT],
+                               warn=warn)
 
 
-def create_incoherent_interpolator(data: np.ndarray) -> Callable[[np.ndarray], np.ndarray]:
+def create_incoherent_interpolator(
+    data: np.ndarray,
+    warn:bool = False
+    ) -> Callable[[np.ndarray], np.ndarray]:
     """Create interpolator for incoherent scattering from tabulated data"""
     return make_log_log_spline(data[NameProcess.ENERGY],
-                               data[NameProcess.INCOHERENT])
+                               data[NameProcess.INCOHERENT],
+                               warn=warn)
 
 
-def create_pair_atom_interpolator(data: np.ndarray) -> Callable[[np.ndarray], np.ndarray]:
+def create_pair_atom_interpolator(
+    data: np.ndarray,
+    warn:bool = False
+    ) -> Callable[[np.ndarray], np.ndarray]:
     """Create interpolator for pair production by an atomic nucleus from tabulated data"""
     return make_pair_interpolator(data[NameProcess.ENERGY],
                                   data[NameProcess.PAIR_ATOM],
-                                  threshold=_THRESHOLD_PAIR_ATOM)
+                                  threshold=_THRESHOLD_PAIR_ATOM,
+                                  warn=warn)
 
 
-def create_pair_electron_interpolator(data: np.ndarray) -> Callable[[np.ndarray], np.ndarray]:
+def create_pair_electron_interpolator(
+    data: np.ndarray,
+    warn:bool = False
+    ) -> Callable[[np.ndarray], np.ndarray]:
     """Create interpolator for pair production by an electron from tabulated data"""
     return make_pair_interpolator(data[NameProcess.ENERGY],
                                   data[NameProcess.PAIR_ELECTRON],
-                                  threshold=_THRESHOLD_PAIR_ELECTRON)
+                                  threshold=_THRESHOLD_PAIR_ELECTRON,
+                                  warn=warn)
 
 
-def create_photoelectric_interpolator(data: np.ndarray,
-                                      absorption_edge=False) -> Callable[[np.ndarray], np.ndarray]:
+def create_photoelectric_interpolator(
+    data: np.ndarray,
+    absorption_edge:bool = False,
+    warn:bool = False
+    ) -> Callable[[np.ndarray], np.ndarray]:
     """Create interpolator for photoelectric absorption from tabulated data"""
     if absorption_edge:
-        return _interpolateAbsorptionEdge(data)
+        return _interpolateAbsorptionEdge(data, warn=warn)
 
     return make_log_log_spline(data[NameProcess.ENERGY],
-                               data[NameProcess.PHOTOELECTRIC])
+                               data[NameProcess.PHOTOELECTRIC],
+                               warn=warn)
 
 
 class Interpolators:
@@ -363,7 +394,7 @@ class Interpolators:
     def __del__(self):
         self.h5file.close()
 
-    def get_interpolators(self, element: int):
+    def get_interpolators(self, element: int, warn:bool = False):
         """Create interpolators for the provided element"""
         if element <= 0 or element > 100:
             raise ValueError("Element must be from 1 ot 100")
@@ -379,14 +410,15 @@ class Interpolators:
             else:
                 data_phot = data
             temp = {
-                NameProcess.COHERENT: create_coherent_interpolator(data),
-                NameProcess.INCOHERENT: create_incoherent_interpolator(data),
-                NameProcess.PAIR_ELECTRON: create_pair_electron_interpolator(data),
-                NameProcess.PAIR_ATOM: create_pair_atom_interpolator(data),
+                NameProcess.COHERENT: create_coherent_interpolator(data, warn=warn),
+                NameProcess.INCOHERENT: create_incoherent_interpolator(data, warn=warn),
+                NameProcess.PAIR_ELECTRON: create_pair_electron_interpolator(data, warn=warn),
+                NameProcess.PAIR_ATOM: create_pair_atom_interpolator(data, warn=warn),
                 NameProcess.PHOTOELECTRIC:
                     create_photoelectric_interpolator(data_phot,
                                                       absorption_edge=table.attrs[
-                                                          'AbsorptionEdge'])
+                                                          'AbsorptionEdge'],
+                                                      warn=warn)
             }
             self.cache[element] = temp
             return temp

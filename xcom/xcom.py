@@ -25,7 +25,11 @@ ENERGY_GRID_DEFAULT = np.array([1.0E+03, 1.5E+03, 2.0E+03, 3.0E+03, 4.0E+03, 5.0
 
 _INTERPOLATORS = Interpolators()
 
-def calculate_attenuation(material: Material, energy: np.ndarray = None):
+def calculate_attenuation(
+    material: Material,
+    energy: np.ndarray = None,
+    warn:bool = False
+    ) -> np.ndarray:
     """
     Calculate attenuation (cm2/gram) for gamma-ray (at energies between 1 keV
     and 100 GeV) for next process:
@@ -69,7 +73,7 @@ def calculate_attenuation(material: Material, energy: np.ndarray = None):
         # Mixture of materials
         atom_weights_amu = MaterialFactory.get_elements_mass_list(material.elements_by_Z)
         # Initialize data with data for first element
-        data = calculate_cross_section(material.elements_by_Z[0], energy)
+        data = calculate_cross_section(material.elements_by_Z[0], energy, warn=warn)
         for name in data.dtype.names:
             if name != "energy":
                 data[name] *= ( material.weights[0] * _AVOGADRO / atom_weights_amu[0])
@@ -77,7 +81,7 @@ def calculate_attenuation(material: Material, energy: np.ndarray = None):
         for atom_weight_amu, element, weight in zip(atom_weights_amu[1:],
                                                     material.elements_by_Z[1:],
                                                     material.weights[1:]):
-            temp = calculate_cross_section(element, energy)
+            temp = calculate_cross_section(element, energy, warn=warn)
             for name in data.dtype.names:
                 if name != "energy":
                     data[name] += temp[name] * weight * _AVOGADRO / atom_weight_amu
@@ -86,7 +90,11 @@ def calculate_attenuation(material: Material, energy: np.ndarray = None):
         raise ValueError("Empty material")
 
 
-def calculate_cross_section(element : Union[int, str], energy: np.ndarray = None) -> np.ndarray:
+def calculate_cross_section(
+    element : Union[int, str],
+    energy: np.ndarray = None,
+    warn:bool = False
+    ) -> np.ndarray:
     """
     Calculate cross-section (barn/atom) for gamma-ray (at energies between 1 keV
     and 100 GeV) for next process:
@@ -130,7 +138,7 @@ def calculate_cross_section(element : Union[int, str], energy: np.ndarray = None
     data = np.zeros(n, dtype=dtype)
     data["energy"] = np.asarray(energy)
 
-    for k, v in _INTERPOLATORS.get_interpolators(element).items():
+    for k, v in _INTERPOLATORS.get_interpolators(element, warn=warn).items():
         data[k] = v(data["energy"])
         data["total"] += data[k]
     data["total_without_coherent"] = data["total"] - data[NameProcess.COHERENT]
