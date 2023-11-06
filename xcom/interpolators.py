@@ -17,6 +17,8 @@ PERIODIC_TABLE_PATH = os.path.join(DATA_PATH, "PeriodicTableofElements.csv")
 
 _THRESHOLD_PAIR_ELECTRON = 2.044014E+06  # eV
 _THRESHOLD_PAIR_ATOM = 1.022007E+06  # eV
+_ENERGY_LOW_THRESHOLD = 1.0E+03  # eV, 1 keV
+_ENERGY_HIGH_THRESHOLD = 1.0E+11  # eV, 100 GeV
 
 
 class MaterialFactory:
@@ -250,7 +252,7 @@ def make_log_log_spline(
                       kind='linear', fill_value="extrapolate")
 
     def spliner(x_sample: np.ndarray) -> np.ndarray:
-        if (np.min(x_sample) < np.min(x) or np.max(x_sample) < np.max(x)) and warn:
+        if (np.min(x_sample) < _ENERGY_LOW_THRESHOLD or np.max(x_sample) > _ENERGY_HIGH_THRESHOLD) and warn:
             warnings.warn("Energy requested is outside of tabulated data, "+
                           "using linear extrapolation", UserWarning)
         return np.where(
@@ -281,7 +283,7 @@ def _interpolateAbsorptionEdge(
                       kind='linear', fill_value="extrapolate")
 
     def spliner(x_sample: np.ndarray) -> np.ndarray:
-        if (np.min(x_sample) < np.min(x) or np.max(x_sample) < np.max(x)) and warn:
+        if (np.min(x_sample) < _ENERGY_LOW_THRESHOLD or np.max(x_sample) > _ENERGY_HIGH_THRESHOLD) and warn:
             warnings.warn("Energy requested is outside of tabulated data, "+
                           "using linear extrapolation", UserWarning)
         return np.where(
@@ -314,7 +316,7 @@ def make_pair_interpolator(
                       kind='linear', fill_value='extrapolate')
 
     def spliner(x_sample: np.ndarray) -> np.ndarray:
-        if (np.max(x_sample) < np.max(x)) and warn:
+        if (np.max(x_sample) > _ENERGY_HIGH_THRESHOLD) and warn:
             warnings.warn("Energy requested is outside of tabulated data, "+
                           "using linear extrapolation", UserWarning)
         indx = x_sample > threshold
