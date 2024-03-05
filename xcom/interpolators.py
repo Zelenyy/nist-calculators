@@ -1,37 +1,39 @@
 """Interpolators for tabulated data"""
+
 import csv
 import os
-from typing import Callable, List, Union, Optional
 import warnings
+from typing import Callable, List, Optional, Union
 
 import numpy as np
 import tables
-from scipy.interpolate import interp1d, PchipInterpolator  #, CubicSpline
+from scipy.interpolate import PchipInterpolator, interp1d  # , CubicSpline
 
 from ._data_converter import NameProcess
 
 ROOT_PATH = os.path.dirname(__file__)
-DATA_PATH = os.path.join(ROOT_PATH, 'data')
-NIST_XCOM_HDF5_PATH = os.path.join(DATA_PATH, 'NIST_XCOM.hdf5')
+DATA_PATH = os.path.join(ROOT_PATH, "data")
+NIST_XCOM_HDF5_PATH = os.path.join(DATA_PATH, "NIST_XCOM.hdf5")
 PERIODIC_TABLE_PATH = os.path.join(DATA_PATH, "PeriodicTableofElements.csv")
 
-_THRESHOLD_PAIR_ELECTRON = 2.044014E+06  # eV
-_THRESHOLD_PAIR_ATOM = 1.022007E+06  # eV
-_ENERGY_LOW_THRESHOLD = 1.0E+03  # eV, 1 keV
-_ENERGY_HIGH_THRESHOLD = 1.0E+11  # eV, 100 GeV
+_THRESHOLD_PAIR_ELECTRON = 2.044014e06  # eV
+_THRESHOLD_PAIR_ATOM = 1.022007e06  # eV
+_ENERGY_LOW_THRESHOLD = 1.0e03  # eV, 1 keV
+_ENERGY_HIGH_THRESHOLD = 1.0e11  # eV, 100 GeV
 
 
 class MaterialFactory:
     """
     Class for creation compound by mass fraction
     """
+
     element_symbols = None
 
     def __init__(self):
         self.elements = []
         self.weights = []
 
-    def add_element(self, element: Union[str, int], weight: float) -> 'MaterialFactory':
+    def add_element(self, element: Union[str, int], weight: float) -> "MaterialFactory":
         """
         Add element and its mass fraction
 
@@ -46,7 +48,7 @@ class MaterialFactory:
         self.weights.append(weight)
         return self
 
-    def add_material(self, material) -> 'MaterialFactory':
+    def add_material(self, material) -> "MaterialFactory":
         """
         Add another material
         """
@@ -61,13 +63,13 @@ class MaterialFactory:
         elements = list(
             map(
                 lambda x: self.get_element_from_symbol(x) if isinstance(x, str) else x,
-                self.elements
+                self.elements,
             )
         )
         return Material(elements, weights=self.weights)
 
     @classmethod
-    def from_formula(cls, formula) -> 'Material':
+    def from_formula(cls, formula) -> "Material":
         """
         Create material from chemical formula
 
@@ -88,7 +90,7 @@ class MaterialFactory:
 
         """
         name_list, value_list = [], []
-        value = ''
+        value = ""
         i = 0
         n = len(formula)
         while i < n:
@@ -96,7 +98,7 @@ class MaterialFactory:
             # print(s)
             if s.isupper():
                 i += 1
-                if value != '':
+                if value != "":
                     value_list.append(int(value))
                 if i == n:
                     name_list.append(s)
@@ -126,7 +128,7 @@ class MaterialFactory:
 
                 if formula[i].isupper():
                     value_list.append(int(value))
-                    value = ''
+                    value = ""
             else:
                 break
         elements = []
@@ -140,20 +142,24 @@ class MaterialFactory:
         return Material(elements, weights)
 
     @classmethod
-    def mix_materials(cls, materials:list['Material'], weights:list[float]) -> 'Material':
+    def mix_materials(
+        cls, materials: list["Material"], weights: list[float]
+    ) -> "Material":
         """
         Mix together existing materials.
         """
         components = {}
         for material_id, material in enumerate(materials):
             for element, weight in zip(material.elements_by_Z, material.weights):
-                components[element] = components.get(element, 0) + weight*weights[material_id]
+                components[element] = (
+                    components.get(element, 0) + weight * weights[material_id]
+                )
         new_elements_by_Z = list(components.keys())
         new_weights = list(components.values())
         return Material(new_elements_by_Z, new_weights)
 
     @classmethod
-    def mix_formulas(cls, formulas:list[str], weights:list[float]) -> 'Material':
+    def mix_formulas(cls, formulas: list[str], weights: list[float]) -> "Material":
         """
         Mix together formulas.
         """
@@ -167,7 +173,7 @@ class MaterialFactory:
     @classmethod
     def _prepare_element_symbol(cls):
         cls.element_symbols = {}
-        with open(PERIODIC_TABLE_PATH, newline='', encoding='UTF-8') as csvfile:
+        with open(PERIODIC_TABLE_PATH, newline="", encoding="UTF-8") as csvfile:
             reader = csv.reader(csvfile, delimiter=",")
             next(reader)
             for row in reader:
@@ -193,7 +199,7 @@ class MaterialFactory:
         with tables.open_file(NIST_XCOM_HDF5_PATH) as h5file:
             group_name = f"/Z{str(element).rjust(3, '0')}"
             table = h5file.get_node(group_name, "data")
-            return table.attrs['AtomicWeight']
+            return table.attrs["AtomicWeight"]
 
     @staticmethod
     def get_elements_mass_list(elements: List[int]) -> np.ndarray:
@@ -207,7 +213,7 @@ class MaterialFactory:
                     raise ValueError("Element must be from 1 ot 100")
                 group_name = f"/Z{str(element).rjust(3, '0')}"
                 table = h5file.get_node(group_name, "data")
-                result[indx] = table.attrs['AtomicWeight']
+                result[indx] = table.attrs["AtomicWeight"]
             return result
 
 
@@ -228,7 +234,7 @@ class Material:
         """
         self.elements_by_Z = elements
         if weights is not None:
-            assert (len(self.elements_by_Z) == len(weights))
+            assert len(self.elements_by_Z) == len(weights)
             sum_ = sum(weights)
             weights = list(map(lambda x: x / sum_, weights))
         self.weights = weights
@@ -236,11 +242,10 @@ class Material:
     def __len__(self):
         return len(self.elements_by_Z)
 
+
 def make_log_log_spline(
-    x: np.ndarray,
-    y: np.ndarray,
-    warn:bool = False
-    ) -> Callable[[np.ndarray], np.ndarray]:
+    x: np.ndarray, y: np.ndarray
+) -> Callable[[np.ndarray], np.ndarray]:
     """
     Create spline of log-log data
     """
@@ -248,27 +253,29 @@ def make_log_log_spline(
     log_y = np.log(y)
     # cs = CubicSpline(x=log_x, y=log_y, bc_type='natural')
     cs = PchipInterpolator(x=log_x, y=log_y)
-    linear = interp1d(x=log_x, y=log_y,
-                      kind='linear', fill_value="extrapolate")
+    linear = interp1d(x=log_x, y=log_y, kind="linear", fill_value="extrapolate")
 
     def spliner(x_sample: np.ndarray) -> np.ndarray:
-        if (np.min(x_sample) < _ENERGY_LOW_THRESHOLD or np.max(x_sample) > _ENERGY_HIGH_THRESHOLD) and warn:
-            warnings.warn("Energy requested is outside of tabulated data, "+
-                          "using linear extrapolation", UserWarning)
+        if (
+            np.min(x_sample) < _ENERGY_LOW_THRESHOLD
+            or np.max(x_sample) > _ENERGY_HIGH_THRESHOLD
+        ):
+            warnings.warn(
+                "Energy requested is outside of tabulated data, "
+                + "using linear extrapolation",
+                UserWarning,
+            )
         return np.where(
             np.logical_and(x_sample > np.min(x), x_sample < np.max(x)),
             np.exp(cs(np.log(x_sample))),  # Use cubic within data range
-            np.exp(linear(np.log(x_sample)))  # Extrapolate with linear
-            )
+            np.exp(linear(np.log(x_sample))),  # Extrapolate with linear
+        )
         # return np.exp(linear(np.log(x_sample)))  # Extrapolate with linear
 
     return spliner
 
 
-def _interpolateAbsorptionEdge(
-    data,
-    warn:bool = False
-    ) -> Callable[[np.ndarray], np.ndarray]:
+def _interpolateAbsorptionEdge(data) -> Callable[[np.ndarray], np.ndarray]:
     data, h5file, group = data
 
     data_K = h5file.get_node(group, "K").read()
@@ -279,17 +286,22 @@ def _interpolateAbsorptionEdge(
 
     # cs = CubicSpline(np.log(x[indx]), np.log(y[indx]), bc_type='natural')
     cs = PchipInterpolator(np.log(x[indx]), np.log(y[indx]))
-    linear = interp1d(np.log(x), np.log(y),
-                      kind='linear', fill_value="extrapolate")
+    linear = interp1d(np.log(x), np.log(y), kind="linear", fill_value="extrapolate")
 
     def spliner(x_sample: np.ndarray) -> np.ndarray:
-        if (np.min(x_sample) < _ENERGY_LOW_THRESHOLD or np.max(x_sample) > _ENERGY_HIGH_THRESHOLD) and warn:
-            warnings.warn("Energy requested is outside of tabulated data, "+
-                          "using linear extrapolation", UserWarning)
+        if (
+            np.min(x_sample) < _ENERGY_LOW_THRESHOLD
+            or np.max(x_sample) > _ENERGY_HIGH_THRESHOLD
+        ):
+            warnings.warn(
+                "Energy requested is outside of tabulated data, "
+                + "using linear extrapolation",
+                UserWarning,
+            )
         return np.where(
             np.logical_and(x_sample > cubicSplineThreshold, x_sample < np.max(x)),
             np.exp(cs(np.log(x_sample))),
-            np.exp(linear(np.log(x_sample)))
+            np.exp(linear(np.log(x_sample))),
         )
         # return np.exp(linear(np.log(x_sample)))
 
@@ -297,11 +309,8 @@ def _interpolateAbsorptionEdge(
 
 
 def make_pair_interpolator(
-    x: np.ndarray,
-    y: np.ndarray,
-    threshold: float,
-    warn:bool = False
-    ) -> Callable[[np.ndarray], np.ndarray]:
+    x: np.ndarray, y: np.ndarray, threshold: float
+) -> Callable[[np.ndarray], np.ndarray]:
     """
     Create spline of linearized log-log data
     """
@@ -309,22 +318,31 @@ def make_pair_interpolator(
     # cs = CubicSpline(x=np.log(x[indx]),
     #                  y=np.log(y[indx] / (x[indx]*(x[indx] - threshold))**3),
     #                  bc_type='natural')
-    cs = PchipInterpolator(x=np.log(x[indx]),
-                     y=np.log(y[indx] / (x[indx]*(x[indx] - threshold))**3))
-    linear = interp1d(x=np.log(x[indx]),
-                      y=np.log(y[indx] / (x[indx]*(x[indx] - threshold))**3),
-                      kind='linear', fill_value='extrapolate')
+    cs = PchipInterpolator(
+        x=np.log(x[indx]), y=np.log(y[indx] / (x[indx] * (x[indx] - threshold)) ** 3)
+    )
+    linear = interp1d(
+        x=np.log(x[indx]),
+        y=np.log(y[indx] / (x[indx] * (x[indx] - threshold)) ** 3),
+        kind="linear",
+        fill_value="extrapolate",
+    )
 
     def spliner(x_sample: np.ndarray) -> np.ndarray:
-        if (np.max(x_sample) > _ENERGY_HIGH_THRESHOLD) and warn:
-            warnings.warn("Energy requested is outside of tabulated data, "+
-                          "using linear extrapolation", UserWarning)
+        if np.max(x_sample) > _ENERGY_HIGH_THRESHOLD:
+            warnings.warn(
+                "Energy requested is outside of tabulated data, "
+                + "using linear extrapolation",
+                UserWarning,
+            )
         indx = x_sample > threshold
         y = np.zeros(x_sample.shape[0])
         y[indx] = np.where(
             x_sample[indx] < np.max(x),
-            np.exp(cs(np.log(x_sample[indx]))) * (x_sample[indx]*(x_sample[indx] - threshold))**3,
-            np.exp(linear(np.log(x_sample[indx]))) * (x_sample[indx]*(x_sample[indx] - threshold))**3
+            np.exp(cs(np.log(x_sample[indx])))
+            * (x_sample[indx] * (x_sample[indx] - threshold)) ** 3,
+            np.exp(linear(np.log(x_sample[indx])))
+            * (x_sample[indx] * (x_sample[indx] - threshold)) ** 3,
         )
         return y
 
@@ -333,62 +351,55 @@ def make_pair_interpolator(
 
 def create_coherent_interpolator(
     data: np.ndarray,
-    warn:bool = False
-    ) -> Callable[[np.ndarray], np.ndarray]:
+) -> Callable[[np.ndarray], np.ndarray]:
     """Create interpolator for coherent scattering from tabulated data"""
-    return make_log_log_spline(data[NameProcess.ENERGY],
-                               data[NameProcess.COHERENT],
-                               warn=warn)
+    return make_log_log_spline(data[NameProcess.ENERGY], data[NameProcess.COHERENT])
 
 
 def create_incoherent_interpolator(
     data: np.ndarray,
-    warn:bool = False
-    ) -> Callable[[np.ndarray], np.ndarray]:
+) -> Callable[[np.ndarray], np.ndarray]:
     """Create interpolator for incoherent scattering from tabulated data"""
-    return make_log_log_spline(data[NameProcess.ENERGY],
-                               data[NameProcess.INCOHERENT],
-                               warn=warn)
+    return make_log_log_spline(data[NameProcess.ENERGY], data[NameProcess.INCOHERENT])
 
 
 def create_pair_atom_interpolator(
     data: np.ndarray,
-    warn:bool = False
-    ) -> Callable[[np.ndarray], np.ndarray]:
+) -> Callable[[np.ndarray], np.ndarray]:
     """Create interpolator for pair production by an atomic nucleus from tabulated data"""
-    return make_pair_interpolator(data[NameProcess.ENERGY],
-                                  data[NameProcess.PAIR_ATOM],
-                                  threshold=_THRESHOLD_PAIR_ATOM,
-                                  warn=warn)
+    return make_pair_interpolator(
+        data[NameProcess.ENERGY],
+        data[NameProcess.PAIR_ATOM],
+        threshold=_THRESHOLD_PAIR_ATOM,
+    )
 
 
 def create_pair_electron_interpolator(
     data: np.ndarray,
-    warn:bool = False
-    ) -> Callable[[np.ndarray], np.ndarray]:
+) -> Callable[[np.ndarray], np.ndarray]:
     """Create interpolator for pair production by an electron from tabulated data"""
-    return make_pair_interpolator(data[NameProcess.ENERGY],
-                                  data[NameProcess.PAIR_ELECTRON],
-                                  threshold=_THRESHOLD_PAIR_ELECTRON,
-                                  warn=warn)
+    return make_pair_interpolator(
+        data[NameProcess.ENERGY],
+        data[NameProcess.PAIR_ELECTRON],
+        threshold=_THRESHOLD_PAIR_ELECTRON,
+    )
 
 
 def create_photoelectric_interpolator(
-    data: np.ndarray,
-    absorption_edge:bool = False,
-    warn:bool = False
-    ) -> Callable[[np.ndarray], np.ndarray]:
+    data: np.ndarray, absorption_edge: bool = False
+) -> Callable[[np.ndarray], np.ndarray]:
     """Create interpolator for photoelectric absorption from tabulated data"""
     if absorption_edge:
-        return _interpolateAbsorptionEdge(data, warn=warn)
+        return _interpolateAbsorptionEdge(data)
 
-    return make_log_log_spline(data[NameProcess.ENERGY],
-                               data[NameProcess.PHOTOELECTRIC],
-                               warn=warn)
+    return make_log_log_spline(
+        data[NameProcess.ENERGY], data[NameProcess.PHOTOELECTRIC]
+    )
 
 
 class Interpolators:
     """Class for interpolating functions from tabulated cross-section data"""
+
     def __init__(self):
         self.cache = {}
         self.h5file = tables.open_file(NIST_XCOM_HDF5_PATH)
@@ -396,7 +407,7 @@ class Interpolators:
     def __del__(self):
         self.h5file.close()
 
-    def get_interpolators(self, element: int, warn:bool = False):
+    def get_interpolators(self, element: int):
         """Create interpolators for the provided element"""
         if element <= 0 or element > 100:
             raise ValueError("Element must be from 1 ot 100")
@@ -406,21 +417,19 @@ class Interpolators:
             group_name = f"/Z{str(element).rjust(3, '0')}"
             table = self.h5file.get_node(group_name, "data")
             data = table.read()
-            if table.attrs['AbsorptionEdge']:
+            if table.attrs["AbsorptionEdge"]:
                 group_name += "/AbsorptionEdge"
                 data_phot = (data, self.h5file, group_name)
             else:
                 data_phot = data
             temp = {
-                NameProcess.COHERENT: create_coherent_interpolator(data, warn=warn),
-                NameProcess.INCOHERENT: create_incoherent_interpolator(data, warn=warn),
-                NameProcess.PAIR_ELECTRON: create_pair_electron_interpolator(data, warn=warn),
-                NameProcess.PAIR_ATOM: create_pair_atom_interpolator(data, warn=warn),
-                NameProcess.PHOTOELECTRIC:
-                    create_photoelectric_interpolator(data_phot,
-                                                      absorption_edge=table.attrs[
-                                                          'AbsorptionEdge'],
-                                                      warn=warn)
+                NameProcess.COHERENT: create_coherent_interpolator(data),
+                NameProcess.INCOHERENT: create_incoherent_interpolator(data),
+                NameProcess.PAIR_ELECTRON: create_pair_electron_interpolator(data),
+                NameProcess.PAIR_ATOM: create_pair_atom_interpolator(data),
+                NameProcess.PHOTOELECTRIC: create_photoelectric_interpolator(
+                    data_phot, absorption_edge=table.attrs["AbsorptionEdge"]
+                ),
             }
             self.cache[element] = temp
             return temp
