@@ -143,10 +143,23 @@ class MaterialFactory:
 
     @classmethod
     def mix_materials(
-        cls, materials: list["Material"], weights: list[float]
+        cls, materials: List["Material"], weights: List[float]
     ) -> "Material":
         """
-        Mix together existing materials.
+        Mix together existing materials into a combined material.
+
+        Parameters
+        ----------
+        materials : List[Material]
+            List of materials to combine.
+        weights : List[float]
+            List of weights to mix the materials. Weights are adjusted to sum to
+            1 in the final material.
+
+        Returns
+        -------
+        material : Material
+            Combined material
         """
         components = {}
         for material_id, material in enumerate(materials):
@@ -159,9 +172,22 @@ class MaterialFactory:
         return Material(new_elements_by_Z, new_weights)
 
     @classmethod
-    def mix_formulas(cls, formulas: list[str], weights: list[float]) -> "Material":
+    def mix_formulas(cls, formulas: List[str], weights: List[float]) -> "Material":
         """
-        Mix together formulas.
+        Mix together different materials defined by formulas.
+
+        Parameters
+        ----------
+        formulas : List[str]
+            List of material formulas to combine.
+        weights : List[float]
+            List of weights to mix the materials. Weights are adjusted to sum to
+            1 in the final material.
+
+        Returns
+        -------
+        material : Material
+            Combined material
         """
         materials = []
 
@@ -228,9 +254,10 @@ class Material:
         ----------
 
         elements : List[int]
-                    List of atomic number of element
+            List of atomic number of element
         weights : Optional[List[float]]
-                    List of mass fraction of elements, not required for single element
+            List of mass fraction of elements, not required for single element.
+            Weights are adjusted to sum to 1
         """
         self.elements_by_Z = elements
         if weights is not None:
@@ -248,6 +275,18 @@ def make_log_log_spline(
 ) -> Callable[[np.ndarray], np.ndarray]:
     """
     Create spline of log-log data
+
+    Parameters
+    ----------
+    x : np.ndarray
+        x-values (independent variable); energy
+    y : np.ndarray
+        y-values (dependent variable); cross section
+
+    Returns
+    -------
+    spliner : Callable
+        Callable spline interpolator
     """
     log_x = np.log(x)
     log_y = np.log(y)
@@ -313,6 +352,20 @@ def make_pair_interpolator(
 ) -> Callable[[np.ndarray], np.ndarray]:
     """
     Create spline of linearized log-log data
+    
+    Parameters
+    ----------
+    x : np.ndarray
+        x-values (independent variable); energy
+    y : np.ndarray
+        y-values (dependent variable); cross section
+    threshold : float
+        Pair production energy threshold
+
+    Returns
+    -------
+    spliner : Callable
+        Callable spline interpolator
     """
     indx = x > threshold
     # cs = CubicSpline(x=np.log(x[indx]),
